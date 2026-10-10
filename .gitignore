@@ -1,0 +1,14 @@
+# 依赖与构建产物
+node_modules/
+dist/
+
+# 运行时数据（账号表等，不进仓库）
+data/
+
+# IDE / 编辑器目录
+.trae/
+.vscode/
+
+# 杂项
+*.log
+*.tsbuildinfo

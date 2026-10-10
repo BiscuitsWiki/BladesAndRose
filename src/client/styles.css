@@ -1,0 +1,1265 @@
+:root {
+  color-scheme: dark;
+  --bg: #14100f;
+  --surface: #1e1817;
+  --surface-2: #2a2220;
+  --border: #3a2f2c;
+  --text: #ece5e2;
+  --muted: #a2908b;
+  --blood: #b3312f;
+  --rose: #e6c7c4;
+  --gold: #d8b26a;
+  --blade: #7d9bb5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.6 "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+#root {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 16px 16px 48px;
+}
+
+h1 {
+  font-size: 22px;
+  margin: 8px 0;
+}
+
+h2 {
+  font-size: 14px;
+  margin: 0 0 10px;
+  color: var(--gold);
+  font-weight: 600;
+}
+
+h3 {
+  font-size: 12px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.dim {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.lobby {
+  padding-top: 40px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0 14px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.topbar strong {
+  color: var(--rose);
+}
+
+/* 只作用于「重设」按钮；座位按钮在 .seats 内，不能被一起推右 */
+.topbar > button {
+  margin-left: auto;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+/* 联机房间开局前：牌桌保持连接但不显示（房主点「开始游戏」后立即出现） */
+.board-hidden {
+  display: none;
+}
+
+/* 「游戏进程」等面板的标题行：标题与右侧按钮同排 */
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+.banner {
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid;
+}
+
+.banner.whiteRose {
+  border-color: var(--rose);
+  color: var(--rose);
+}
+
+.banner.bloodBlade {
+  border-color: var(--blood);
+  color: #f0a3a1;
+}
+
+/* 轮次轨道：N 个六边形对应 N 轮，发动后按顺序填充水晶编号 */
+.crystal-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.track-hex {
+  width: 26px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: var(--border);
+}
+
+.track-hex-body {
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  display: grid;
+  place-items: center;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 已发动的水晶：与玩家区已放出水晶（.crystal.placed）完全一致的浅灰样式 */
+.track-hex.filled {
+  background: #8d8582;
+}
+
+.track-hex.filled .track-hex-body {
+  background: #b6afac;
+  color: #241f1e;
+  font-weight: 600;
+}
+
+/* 版图三栏：左（白蔷薇 / 献祭）· 中（弃牌区，窄）· 右（血刃 / 死亡） */
+.board-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.board-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.board-col .zone {
+  flex: 1;
+}
+
+/* 版图内的次级标题（轮次 / 献祭区 / 弃牌区 / 血刃区）：加粗放大并改用亮色，明显区别于正文与格子标题 */
+.col-head {
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid rgba(162, 144, 139, 0.35);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.board-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+}
+
+.zone {
+  background: var(--surface-2);
+  /* 每格独立边框，与区块外框共同构成「格子」感 */
+  border: 1px solid rgba(162, 144, 139, 0.25);
+  border-radius: 8px;
+  padding: 10px;
+  min-height: 72px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.chip-bud {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.chip-blade {
+  border-color: var(--blood);
+  color: #f0a3a1;
+}
+
+/* 顺序公开（2 号）时在卡牌下方标注出牌者；匿名公开不会渲染该标注 */
+.reveal-item {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.reveal-owner {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 「上一轮公开」里的出牌情况（自持币者起顺时针，只列状态、不含牌面） */
+.play-status {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+/* 第一行：标题与起始情况（出牌情况 + 自持币者） */
+.play-status-label {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+/* 第二行起：实际出牌情况名单 */
+.play-status-list {
+  margin: 0;
+  color: var(--text);
+}
+
+.play-status-list em {
+  font-style: normal;
+}
+
+/* 已出牌：标题同款金黄色 + 加粗；跳过：灰白色 */
+.play-status-played {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.play-status-passed {
+  color: #cfc8c4;
+}
+
+em.bud {
+  color: var(--gold);
+  font-style: normal;
+}
+
+em.blade {
+  color: var(--blood);
+  font-style: normal;
+}
+
+/* 白蔷薇区的白花标识与进度数字：白色，区别于金色花苞与红色血刃 */
+em.rose-count {
+  color: #fff;
+  font-style: normal;
+}
+
+/* 游戏进程：独立面板描述当前步骤（原先埋在玩家区底部，不够醒目） */
+.progress {
+  box-shadow: inset 3px 0 0 var(--border);
+}
+
+.progress.me {
+  border-color: var(--gold);
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+
+.progress .step {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.progress.me .step {
+  color: var(--gold);
+  font-weight: 600;
+}
+
+.progress .meta {
+  margin: 6px 0 0;
+}
+
+/* 轮次水晶轨道已挪到「游戏进程」面板底部 */
+.progress .col-head {
+  margin-top: 12px;
+}
+
+.progress .crystal-track {
+  margin-bottom: 0;
+}
+
+/* 本轮发动的水晶与效果：紧跟轮次轨道，避免只看编号不知道发生了什么 */
+.round-note {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.round-note strong {
+  color: var(--gold);
+  margin-right: 4px;
+}
+
+.players {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 玩家行 + 左侧的睁眼标注槽位；标注是独立按钮，必须放在行按钮之外 */
+.player-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.player-row.me {
+  border-color: var(--rose);
+}
+
+.player-row.picked {
+  background: var(--blood);
+  border-color: var(--blood);
+}
+
+.player-row:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+/* 断线中的玩家行：整行变灰（行末标签为「断线中」或「AI 托管」） */
+.player-row.offline {
+  opacity: 0.5;
+}
+
+.player-row:not(:disabled):hover {
+  border-color: var(--gold);
+}
+
+.seat {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  flex: none;
+}
+
+.pname {
+  flex: none;
+  width: 4.4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「（你）」占位槽：定宽 + 更小的字号，「（你）」是三个全角字符 */
+.self-slot {
+  flex: none;
+  width: 3em;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 手牌数量：矩形框 + 框内数字 */
+.hand-box {
+  flex: none;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 手牌为 0 时，框与数字一起转为浅灰 */
+.hand-box.empty {
+  color: var(--muted);
+  border-color: var(--muted);
+  background: transparent;
+  opacity: 0.45;
+}
+
+/* 水晶：六边形；未放出为黑色，放出后转浅灰并显示编号 */
+.crystal {
+  flex: none;
+  width: 22px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: #55504d;
+}
+
+.crystal-body {
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  display: grid;
+  place-items: center;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: #0a0807;
+  color: var(--rose);
+  font-size: 11px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.crystal.placed {
+  background: #8d8582;
+}
+
+.crystal.placed .crystal-body {
+  background: #b6afac;
+  color: #241f1e;
+}
+
+.tags {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--gold);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+/* 「已跳过」标签：与金色的「已出牌」区分，整体转为浅灰 */
+.tag.gray {
+  color: var(--muted);
+  border-color: var(--muted);
+}
+
+/* 持币标记：银色钱币（金属渐变 + 六角星刻纹），替代原先的「持币」文字标签 */
+.coin {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f4f6f8, #c6ccd2 55%, #8d959d);
+  box-shadow: inset 0 0 0 1px rgba(45, 50, 56, 0.45);
+}
+
+/* 空心六角星：两个内接等边三角形的描边（不填充）；外接圆半径 6.5px，顶点落在硬币内圈线上 */
+.coin svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: rgba(88, 96, 104, 0.85);
+  stroke-width: 0.9;
+  stroke-linejoin: round;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.room-input {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  min-width: 150px;
+}
+
+.room-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.actions.tight {
+  margin-top: 10px;
+}
+
+/* 大厅顶部的身份条：UID 格子（游客 10 位 / 专属账号 9 位）+ 注册 / 登录 / 退出 */
+.account-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.uid-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.account-form {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.account-form .room-input {
+  min-width: 120px;
+}
+
+.btn {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--gold);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: var(--blood);
+  border-color: var(--blood);
+  color: #fff;
+}
+
+.btn.small {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+.seats {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.notice {
+  margin: 0 0 12px;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+}
+
+.notice code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  color: var(--gold);
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 55%);
+  z-index: 20;
+}
+
+.modal {
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+
+.modal p {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* 房间面板：座位格子 + 观战席 */
+.seat-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.seat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 96px;
+  padding: 10px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.seat-card.empty {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.seat-card.empty:hover {
+  border-color: var(--gold);
+  color: var(--text);
+}
+
+.seat-card.mine {
+  border-color: var(--gold);
+}
+
+/* 「转移房主」模式下可点的目标：已入座、且不是自己的座位 */
+.seat-card.selectable {
+  border-color: var(--gold);
+  border-style: dashed;
+}
+
+.seat-card.selectable:hover {
+  background: var(--surface);
+}
+
+/* 断线中的座位：整体变灰（未开局超 1 分钟按退出处理；对局进行中座位保留到本局结束） */
+.seat-card.offline {
+  opacity: 0.45;
+}
+
+/* AI 托管中的座位（对局中断线超 3 分钟）：服务器代为操作，比纯断线略亮一点 */
+.seat-card.ai {
+  opacity: 0.7;
+}
+
+.seat-card:disabled {
+  cursor: default;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  flex: none;
+}
+
+.avatar.small {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+}
+
+.seat-name {
+  font-size: 12px;
+  max-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seat-no {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* 顶栏的房间名 */
+.room-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gold);
+}
+
+/* 顶栏的房间名 / 房间号格子（内含复制图标） */
+.room-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  color: var(--gold);
+  background: var(--surface);
+}
+
+.icon-btn.copied {
+  color: var(--gold);
+}
+
+.icon-btn svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* 观战视角聚焦的玩家行 */
+.player-row.focused {
+  outline: 1px solid var(--gold);
+  outline-offset: 1px;
+}
+
+.identity {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.identity strong {
+  color: var(--rose);
+}
+
+/* 自己的水晶技能：编号只是指针，必须把名称与效果一并给出 */
+.skill-note {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+
+.skill-note strong {
+  color: var(--gold);
+}
+
+.skill-note .dim {
+  display: block;
+  margin-top: 2px;
+}
+
+.hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 78px;
+  height: 100px;
+  justify-content: center;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.card:hover:not(:disabled) {
+  border-color: var(--gold);
+}
+
+.card.selected {
+  border-color: var(--gold);
+  background: #382c22;
+  transform: translateY(-4px);
+}
+
+.card:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.knowledge {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.knowledge li {
+  margin-bottom: 4px;
+}
+
+.log {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.log li {
+  margin-bottom: 2px;
+}
+
+/* 白蔷薇标识：白色蔷薇，区别于司教/信者的黄色花苞 */
+em.rose {
+  color: var(--rose);
+  font-style: normal;
+}
+
+.chip-rose {
+  border-color: var(--rose);
+  color: var(--rose);
+}
+
+/* 睁眼标注槽位：固定宽度保证座位号左对齐。
+   睁眼 = 眼睛图标（系统标注或自行标注）；未睁眼 = 半透明「闭眼」标记。
+   睁眼玩家视角的槽位由系统给出且不可修改（.locked），非睁眼玩家可点击切换。 */
+.eye-slot {
+  flex: none;
+  width: 22px;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  line-height: 1;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 0.2;
+  transition: opacity 0.15s;
+}
+
+/* 闭眼标记：描边路径，随 currentColor 与槽位透明度变化 */
+.eye-slot svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+}
+
+.eye-slot:not(.locked):hover {
+  opacity: 0.6;
+}
+
+.eye-slot.marked {
+  opacity: 1;
+  color: var(--gold);
+}
+
+.eye-slot.locked {
+  cursor: default;
+}
+
+.eye-slot:focus-visible {
+  opacity: 1;
+  outline: 1px dotted var(--gold);
+  outline-offset: 2px;
+}
+
+/* 角色配比编辑器 */
+.dist table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dist td {
+  padding: 4px 0;
+  vertical-align: middle;
+}
+
+.dist .role-name {
+  width: 5em;
+}
+
+.dist .stepper {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dist .count {
+  min-width: 2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.warn {
+  color: var(--gold);
+  font-size: 13px;
+}
+
+/* 手机适配：收紧页面留白，压缩玩家行与版图网格，保证不横向溢出 */
+@media (max-width: 560px) {
+  #root {
+    padding: 10px 10px 40px;
+  }
+
+  h1 {
+    font-size: 19px;
+  }
+
+  .panel {
+    padding: 12px 10px;
+  }
+
+  .topbar {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-size: 12px;
+  }
+
+  .board-grid {
+    grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .board-col {
+    gap: 8px;
+  }
+
+  .progress .step {
+    font-size: 14px;
+  }
+
+  .track-hex {
+    width: 22px;
+    height: 24px;
+  }
+
+  .track-hex-body {
+    font-size: 11px;
+  }
+
+  .zone {
+    padding: 8px;
+    min-height: 60px;
+  }
+
+  .player-row {
+    font-size: 12px;
+    gap: 5px 8px;
+    padding: 7px 8px;
+  }
+
+  .player-line {
+    gap: 8px;
+  }
+
+  .eye-slot {
+    width: 18px;
+    font-size: 15px;
+  }
+
+  .eye-slot svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .seat {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+
+  .pname {
+    width: 3.9em;
+  }
+
+  .self-slot {
+    width: 2.8em;
+    font-size: 10px;
+  }
+
+  .tag {
+    font-size: 10px;
+    padding: 1px 6px;
+  }
+
+  .hand {
+    gap: 6px;
+  }
+
+  .card {
+    width: 68px;
+    height: 86px;
+  }
+
+  .dist td {
+    padding: 3px 0;
+  }
+
+  .dist .role-name {
+    width: 4em;
+  }
+
+  .dist .stepper {
+    gap: 6px;
+  }
+
+  .log {
+    padding-left: 16px;
+  }
+
+  /* 公开结算动画：压缩弹窗与牌尺寸，移动端每行 4 张（10 人局 3 行也放得下） */
+  .reveal-stage {
+    width: 96vw;
+    max-height: 88vh;
+    padding: 12px;
+  }
+
+  .reveal-grid {
+    gap: 8px;
+  }
+
+  .reveal-anim-card {
+    width: clamp(46px, calc((100% - 30px) / 4), 72px);
+  }
+}
+
+/* ══ 公开结算的一幕：固定全屏层，严格 5 秒内拦截一切点击（不可跳过） ══ */
+.reveal-film {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 72%);
+  /* 后 2 秒遮罩淡出，但作为布局盒始终拦截点击 */
+  transition: background 2s ease-out;
+  touch-action: none;
+}
+
+.reveal-film.flying {
+  background: rgb(0 0 0 / 0%);
+}
+
+/* 弹窗（占据屏幕大部分空间）；底衬用伪元素，飞行阶段只淡出底衬、牌继续可见 */
+.reveal-stage {
+  position: relative;
+  width: min(94vw, 680px);
+  max-height: 84vh;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reveal-stage::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgb(0 0 0 / 55%);
+  transition: opacity 1.6s ease-out;
+}
+
+.reveal-film.flying .reveal-stage::before,
+.reveal-film.flying .reveal-stage-head {
+  opacity: 0;
+}
+
+.reveal-stage-head,
+.reveal-grid {
+  position: relative;
+  z-index: 1;
+}
+
+.reveal-stage-head {
+  margin: 0;
+  font-size: 16px;
+  text-align: center;
+  transition: opacity 1.6s ease-out;
+}
+
+.reveal-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+/* 前 3 秒：所有牌同时缓缓翻开；后 2 秒：缩小飞向结算区（飞行 transform 由行内样式给出） */
+.reveal-anim-card {
+  width: clamp(52px, calc((100% - 48px) / 5), 96px);
+  aspect-ratio: 2 / 3;
+  perspective: 800px;
+  transition:
+    transform 2s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.4s ease-in 1.6s;
+}
+
+.reveal-film.flying .reveal-anim-card {
+  opacity: 0;
+}
+
+.reveal-anim-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 3s linear;
+}
+
+.reveal-anim-card.flipped .reveal-anim-inner {
+  transform: rotateY(180deg);
+}
+
+.reveal-anim-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.reveal-anim-back {
+  background: repeating-linear-gradient(45deg, #241d1c 0 6px, #2c2422 6px 12px);
+}
+
+.reveal-anim-front {
+  transform: rotateY(180deg);
+  background: var(--surface-2);
+}
+
+.reveal-anim-front .chip {
+  font-size: 15px;
+  padding: 5px 10px;
+}
+
+/* 飞行终点：「上一轮公开」面板聚焦，2 秒升到峰值（正好动画结束时最亮） */
+.panel.reveal-focus {
+  animation: reveal-focus 2s ease-in-out;
+}
+
+@keyframes reveal-focus {
+  from {
+    box-shadow: 0 0 0 0 rgb(216 178 106 / 0%);
+  }
+
+  to {
+    box-shadow:
+      0 0 0 2px var(--gold),
+      0 0 26px rgb(216 178 106 / 45%);
+  }
+}

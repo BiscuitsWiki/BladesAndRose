@@ -1,0 +1,35 @@
+# 「血与刃的白蔷薇」线上部署（独立 compose 项目，与 ATT 的 att 项目互不影响）
+#   启动：sudo docker compose -p bar up -d --build
+#   日志：sudo docker compose -p bar logs -f --tail 200
+#   停止：sudo docker compose -p bar down
+services:
+  bar-server:
+    build: .
+    image: blades-and-rose:latest
+    container_name: bar-server
+    restart: unless-stopped
+    ports:
+      # 过渡期：非标端口直接对外（与 ATT 的 8080 同一思路，免备案先跑）
+      # 备案 + 域名就绪后改为 "127.0.0.1:8001:8000"，由宿主 Caddy 反代 HTTPS，不再对外暴露该端口
+      - "8082:8000"
+    environment:
+      - PORT=8000
+    volumes:
+      # 账号表落盘目录（data/accounts.json）：容器重建不丢账号
+      - bar_data:/app/data
+    logging:
+      # 容器日志上限：单文件 10MB、最多 3 份（默认无上限，长期运行会吃满磁盘）
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/games').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  bar_data:
+    name: bar_data
