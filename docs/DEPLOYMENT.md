@@ -14,7 +14,7 @@
 | 部署方式 | 上传源码 → `sudo docker compose -p bar up -d --build` |
 | 更新步骤 | ① `tar -czf` 打包 `src/ package.json package-lock.json tsconfig.json vite.config.ts index.html`（`docs/` 与 `*.md` 被 `.dockerignore` 排除，不进镜像）→ ② `scp` 上传 → ③ 服务器 `sudo tar -xzf` 解包到 `/opt/bar` → ④ 先 `sudo docker tag blades-and-rose:latest blades-and-rose:prev` 留回滚点 → ⑤ `sudo docker compose -p bar up -d --build` |
 | 回滚 | `sudo docker tag blades-and-rose:prev blades-and-rose:latest && sudo docker compose -p bar up -d`（源码可另从 GitHub `main` 取） |
-| 当前版本 | GitHub `main` 提交 `305a35f`（2025 扩充包技能组：房间持有技能组 + 技能插件化；`/room-skills` 原地改技能组、不清局不踢人） |
+| 当前版本 | GitHub `main` 提交 `8ef95c4`（UI：UID 只显示身份与编号；技能组展示具体技能明细 `loadoutEntries`） |
 | 限流 | 进程内按 IP 固定窗口（游客发号 20/分、注册 10/分、建房 20/分、座位认领 60/分、房间操作 60/分、房间信息 300/分），超限 429 |
 | SSH 登录 | 允许密码登录（2026-10-10 已回滚"仅密钥"加固：`00-hardening.conf` 已删除，配置回到原状）；`/etc/ssh/` 下的 `*.bak-hardening-20261009` 为当时备份，可随时清理 |
 | SSH 防爆破 | fail2ban（2026-10-10 安装，已设为开机自启）：sshd jail，10 分钟内失败 5 次封禁 6 小时，重复封禁时长翻倍（上限 1 周）；后端用 polling 读 `/var/log/auth.log`（Ubuntu 24.04 SSH 为 socket 激活，systemd 后端匹配不到日志）；配置在 `/etc/fail2ban/jail.d/bar-ssh.local`；查看 `sudo fail2ban-client status sshd`，解封 `sudo fail2ban-client set sshd unbanip <IP>` |
