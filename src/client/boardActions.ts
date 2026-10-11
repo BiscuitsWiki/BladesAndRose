@@ -26,6 +26,10 @@ export function handActions(
   if (viewerId === null || G.phase !== 'play' || G.currentActor !== viewerId) return null;
   /** 10 号换牌挂起：这不是普通出牌回合，只能选一张牌完成对调 */
   const swapping = G.pendingRedraw === viewerId;
+  const self = G.players.find((p) => p.id === viewerId);
+  /** 8 号扩充：司教持牌不得跳过（只有本人视角能看到自己的角色，不向他人泄露） */
+  const bishopMustPlay =
+    G.modifiers.bishopMustPlay && self?.role === 'bishop' && (self.handCount ?? 0) > 0;
   return {
     canGoLast:
       !swapping &&
@@ -33,8 +37,17 @@ export function handActions(
       !G.modifiers.goLastUsed &&
       pickedCardId === null,
     canConfirm: pickedCardId !== null,
-    canSkip: !swapping && !G.modifiers.mustPlay.includes(viewerId),
+    canSkip: !swapping && !G.modifiers.mustPlay.includes(viewerId) && !bishopMustPlay,
   };
+}
+
+/**
+ * 3 号扩充：本轮随机出牌——轮到自己时显示「随机出牌」按钮（选牌会被引擎拒绝）。
+ * 单独成函数，不进入 HandActions 的既有形状。
+ */
+export function canRandomPlay(G: GameView, viewerId: string | null): boolean {
+  if (viewerId === null || G.phase !== 'play' || G.currentActor !== viewerId) return false;
+  return G.pendingRedraw === null && G.modifiers.randomPlay === true;
 }
 
 /**

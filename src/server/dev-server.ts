@@ -30,9 +30,25 @@ import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Server } from 'boardgame.io/server';
+import { createMatch as createMatchRecord } from 'boardgame.io/internal';
 import koaBody from 'koa-body';
 import { io } from 'socket.io-client';
-import { autoMoveFor, MAX_PLAYERS, MIN_PLAYERS, type Distribution, type GameState, type Move } from '../engine';
+import {
+  LOADOUT_BASE,
+  LOADOUT_PRESETS,
+  autoMoveFor,
+  loadoutPresetId,
+  loadoutSignature,
+  MAX_PLAYERS,
+  MIN_PLAYERS,
+  resolveLoadout,
+  sameLoadout,
+  validateLoadout,
+  type Distribution,
+  type GameState,
+  type Move,
+  type SkillLoadout,
+} from '../engine';
 import { getBladesAndRose } from '../client/game';
 import { AccountStore, uidKind } from './accounts';
 import { hitRateWindow, pruneExpired, type RateWindow } from './rateLimit';
@@ -139,6 +155,44 @@ function hardenSeatTable(): void {
   };
 }
 hardenSeatTable();
+
+/**
+ * 服务器侧建局（技能组方案 §8）：用房间当前技能组组 setupData，经 boardgame.io/internal 的
+ * createMatch（内含 validateSetupData 与 InitializeGame）生成 { initialState, metadata } 后落库。
+ *
+ * 不用 REST /games/:name/create 的原因：它的 matchID 由库生成 uuid，无法使用本项目的 6 位房间码；
+ * 而 InMemory 存储的 createMatch 会把 initialState 同时写入 state，
+ * 因此预建的对局不会被随后客户端 socket 同步时的「按需自动建房」覆盖。
+ */
+async function createMatchWithLoadout(opts: {
+  matchID: string;
+  gameName: string;
+  numPlayers: number;
+  loadout: SkillLoadout;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const game = games.find((g) => g.name === opts.gameName);
+  if (!game) return { ok: false, error: `未知的配比变体：${opts.gameName}` };
+  if (
+    !Number.isInteger(opts.numPlayers) ||
+    opts.numPlayers < MIN_PLAYERS ||
+    opts.numPlayers > MAX_PLAYERS
+  ) {
+    return { ok: false, error: `人数必须在 ${MIN_PLAYERS}-${MAX_PLAYERS} 之间` };
+  }
+  const record = createMatchRecord({
+    game,
+    numPlayers: opts.numPlayers,
+    setupData: { loadout: opts.loadout },
+    unlisted: true,
+  });
+  if ('setupDataError' in record) return { ok: false, error: record.setupDataError };
+  try {
+    await server.db.createMatch(opts.matchID, record);
+  } catch (error) {
+    return { ok: false, error: `建局失败：${(error as Error).message}` };
+  }
+  return { ok: true };
+}
 
 /** 前端构建产物目录（vite build 输出）；开发时通常不存在 */
 const DIST_DIR = path.resolve(process.cwd(), 'dist');
@@ -331,6 +385,8 @@ const roomExtras = new Map<
   {
     name: string;
     started: boolean;
+    /** 房间技能组（水晶槽 1-12 → 技能 id）：由房主持有、可修改；建局时作为 setupData 固化进对局 */
+    loadout: SkillLoadout;
     /** 当前房主的座位号；null = 尚未推得（新房间 / 刚重开） */
     hostSeat: string | null;
     /** hostSeat 上那位房主的座位凭据：座位被清空或换了人（凭据不同）即视为房主已离开 */
@@ -365,6 +421,7 @@ function roomExtra(matchID: string) {
     extra = {
       name: `房间 ${matchID}`,
       started: false,
+      loadout: resolveLoadout(undefined),
       hostSeat: null,
       hostToken: null,
       hostAbsentSince: null,
@@ -376,6 +433,41 @@ function roomExtra(matchID: string) {
     roomExtras.set(matchID, extra);
   }
   return extra;
+}
+
+/** 房间技能组的对外表述（房间面板展示用；不含任何隐藏信息）。sig 是技能组签名，供客户端检测变化后重连刷新 */
+function skillsetOf(extra: ReturnType<typeof roomExtra>): { id: string | null; name: string; sig: string } {
+  const id = loadoutPresetId(extra.loadout);
+  const preset = LOADOUT_PRESETS.find((p) => p.id === id);
+  return { id, name: preset?.name ?? '自定义技能组', sig: loadoutSignature(extra.loadout) };
+}
+
+/**
+ * 原地把技能组补写进等待中的对局（改技能组**不再清局**）。
+ *
+ * 只改 `state.G.skills` 与 `metadata.setupData`，不碰 match 元数据的座位表 / 凭据，
+ * 也不碰 roomExtras 的房主、UID 绑定与在线记录——任何玩家都不会被踢出房间、无需刷新。
+ * boardgame.io 的 master 每次同步 / 动作都会从存储重新读取状态（见 master.onUpdate），
+ * 因此写回后：新同步立即读到新技能组；已连接客户端由 `/room-info` 轮询到 `skillset.sig`
+ * 变化后重建连接（= 重新同步）刷新牌桌（开局前牌桌本来就隐藏，整个过程对玩家不可见）。
+ *
+ * 仅允许用于「尚未开局且尚无人行动」的对局；返回是否修补成功（false = 保持原状）。
+ */
+async function patchMatchLoadout(matchID: string, loadout: SkillLoadout): Promise<boolean> {
+  const { state, metadata } = await server.db.fetch(matchID, { state: true, metadata: true });
+  const G = (state as unknown as MasterState | undefined)?.G;
+  if (!state || !metadata || !G) return false;
+  // 已放出水晶 / 已有人行动 / 已分出胜负：不允许改（对局已经开始）
+  if (G.crystalsPlaced > 0 || G.playSequence.length > 0 || G.winner !== null) return false;
+  const next = resolveLoadout(loadout);
+  const patchedState = { ...state, G: { ...G, skills: next } };
+  const patchedMeta = {
+    ...metadata,
+    setupData: { ...(metadata.setupData as object | undefined), loadout: next },
+  };
+  await server.db.setState(matchID, patchedState);
+  await server.db.setMetadata(matchID, patchedMeta);
+  return true;
 }
 
 /** 取（必要时创建）某个座位的在线 / 托管记录 */
@@ -570,6 +662,8 @@ function registerRoomApi(): void {
       numPlayers: players ? Object.keys(players).length : undefined,
       name: extra?.name ?? `房间 ${matchID}`,
       started: extra?.started === true,
+      /** 房内技能组（展示用）：id 为预设标识（base / 2025），未命中预设时为 null；sig 供客户端检测变化 */
+      skillset: extra ? skillsetOf(extra) : { id: 'base', name: '初版', sig: loadoutSignature(LOADOUT_BASE) },
       hostSeat: players ? resolveHostSeat(matchID, players) : null,
       seats,
       // 未开局时：断线超过 1 分钟按退出房间处理；对局进行中：座位保留到本局结束
@@ -611,6 +705,59 @@ function registerRoomApi(): void {
     }
     roomExtra(matchID).name = name;
     ctx.body = { name };
+  });
+
+  /**
+   * 房主修改房间技能组（技能组方案 §8）：
+   *   - 仅房主可改（凭据校验，同 /room-name）；
+   *   - 对局进行中不允许修改（提示先「重开」）；
+   *   - 未开局：更新房间技能组并清空当前对局数据（与 /reset-room 同款语义：房间码保留，
+   *     玩家重新认领座位时由服务器按新技能组建局）。
+   */
+  server.router.post('/room-skills', koaBody(), async (ctx) => {
+    if (!rateAllow(ctx, 'room-ops', 60)) return;
+    const body = ctx.request.body as
+      | { matchID?: unknown; playerID?: unknown; credentials?: unknown; loadout?: unknown }
+      | undefined;
+    const matchID = typeof body?.matchID === 'string' ? body.matchID : null;
+    const playerID = typeof body?.playerID === 'string' ? body.playerID : null;
+    const credentials = typeof body?.credentials === 'string' ? body.credentials : null;
+    if (!matchID || !playerID) {
+      ctx.throw(400, 'matchID and playerID are required');
+      return;
+    }
+    const players = await fetchSeatMeta(matchID);
+    if (!players) {
+      ctx.throw(404, `Match ${matchID} not found`);
+      return;
+    }
+    const player = seatMetaOf(players, playerID);
+    if (!player?.credentials || player.credentials !== credentials) {
+      ctx.throw(403, 'Invalid credentials');
+    }
+    if (resolveHostSeat(matchID, players) !== playerID) {
+      ctx.throw(403, 'Only the host can change the skillset');
+    }
+    const extra = roomExtra(matchID);
+    if (extra.started === true) {
+      ctx.status = 409;
+      ctx.body = { error: '对局进行中，无法修改技能组；请先「重开」' };
+      return;
+    }
+    const invalid = validateLoadout(body?.loadout);
+    if (invalid) {
+      ctx.throw(400, invalid);
+      return;
+    }
+    // 原地补写技能组（不清局、不踢人）；对局已开始 / 已有人行动时拒绝
+    const patched = await patchMatchLoadout(matchID, body?.loadout as SkillLoadout);
+    if (!patched) {
+      ctx.status = 409;
+      ctx.body = { error: '对局已开始，无法修改技能组；请先「重开」' };
+      return;
+    }
+    extra.loadout = resolveLoadout(body?.loadout);
+    ctx.body = { ok: true, skillset: skillsetOf(extra) };
   });
 
   server.router.post('/room-start', koaBody(), async (ctx) => {
@@ -752,27 +899,64 @@ function registerAccountApi(): void {
   server.router.post('/seat-claim', koaBody(), async (ctx) => {
     if (!rateAllow(ctx, 'seat-claim', 60)) return;
     const body = ctx.request.body as
-      | { matchID?: unknown; playerID?: unknown; uid?: unknown; playerName?: unknown; credentials?: unknown }
+      | {
+          matchID?: unknown;
+          playerID?: unknown;
+          uid?: unknown;
+          playerName?: unknown;
+          credentials?: unknown;
+          /** 建局参数（技能组方案 §8）：对局不存在时由服务器按房内技能组直接建局 */
+          count?: unknown;
+          gameName?: unknown;
+        }
       | undefined;
     const matchID = typeof body?.matchID === 'string' ? body.matchID : null;
     const playerID = typeof body?.playerID === 'string' ? body.playerID : null;
     const uid = typeof body?.uid === 'string' ? body.uid : null;
     const playerName = typeof body?.playerName === 'string' ? body.playerName.trim().slice(0, 24) : '';
     const credentials = typeof body?.credentials === 'string' ? body.credentials : null;
+    const count = typeof body?.count === 'number' ? body.count : null;
+    const gameName = typeof body?.gameName === 'string' ? body.gameName : null;
     if (!matchID || !playerID || !uid || !uidKind(uid)) {
       ctx.throw(400, 'matchID、playerID 与合法 uid 均为必填');
       return;
     }
 
-    const { metadata } = await server.db.fetch(matchID, { metadata: true });
+    let { metadata } = await server.db.fetch(matchID, { metadata: true });
+    const extra = roomExtra(matchID);
+
+    // 服务器侧建局：对局不存在且请求带了建局参数时，按房内技能组建局再认领座位
+    if (!metadata && count !== null && gameName !== null) {
+      const created = await createMatchWithLoadout({
+        matchID,
+        gameName,
+        numPlayers: count,
+        loadout: extra.loadout,
+      });
+      if (!created.ok) {
+        ctx.throw(400, created.error);
+        return;
+      }
+      ({ metadata } = await server.db.fetch(matchID, { metadata: true }));
+    }
+
+    // 兜底：对局已存在但技能组与房内不一致（如旧客户端「空连接自动建房」留下的初版对局）→
+    // 原地补写技能组（不打断任何在座玩家）；补不了（对局已开始 / 已行动）就维持现状，绝不清局踢人
+    if (metadata && count !== null && gameName !== null && extra.started !== true) {
+      const setupLoadout = (metadata.setupData as { loadout?: SkillLoadout } | undefined)?.loadout;
+      if (!sameLoadout(setupLoadout ?? LOADOUT_BASE, extra.loadout)) {
+        await patchMatchLoadout(matchID, extra.loadout);
+        ({ metadata } = await server.db.fetch(matchID, { metadata: true }));
+      }
+    }
+
     if (!metadata) {
-      // 房间还不存在：客户端据此先建房再重试（所以带上 code，而不是通用 404 文案）
+      // 房间还不存在：客户端据此先建房再重试（旧客户端降级路径，所以带上 code）
       ctx.status = 404;
       ctx.body = { error: `房间 ${matchID} 还不存在`, code: 'no-match' };
       return;
     }
     const players = metadata.players as unknown as Record<string, SeatMeta>;
-    const extra = roomExtra(matchID);
 
     const decision = decideSeatClaim({ players, uids: extra.uids, seat: playerID, uid, credentials });
     if (decision.kind === 'error') {
@@ -863,8 +1047,12 @@ function movePayload(move: Move): { type: string; args: unknown[] } {
       return { type: 'chooseGoLast', args: [] };
     case 'playCard':
       return { type: 'playCard', args: [move.cardId] };
+    case 'playRandom':
+      return { type: 'playRandom', args: [] };
     case 'passTurn':
       return { type: 'passTurn', args: [] };
+    case 'pickPreShuffleTarget':
+      return { type: 'pickPreShuffleTarget', args: [move.targetId] };
     case 'resolveRedraw':
       return { type: 'resolveRedraw', args: move.targetId ? [move.targetId] : [] };
   }

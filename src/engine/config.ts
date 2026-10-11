@@ -36,7 +36,9 @@ export type MagicTargetSpec =
   | 'oneAny' // 指定任意一名玩家（含自己）
   | 'oneOther' // 指定一名其他玩家
   | 'oneOtherWithCards' // 指定一名有手牌的其他玩家
-  | 'twoOthersWithCards'; // 指定两名有手牌的其他玩家
+  | 'twoOthersWithCards' // 指定两名有手牌的其他玩家
+  | 'oneOrTwoOthersWithCards' // 扩充 5 号：从「其他有手牌玩家」中选 min(2, 池) 人
+  | 'oneOrTwoOthers'; // 扩充 2 号：从「其他玩家」中选（≥8 人局 2 人，否则 1 人）
 
 /** 技能 ID。与规则书条目编号无关，不同条目可以指向同一个技能。 */
 export type SkillId =
@@ -50,7 +52,16 @@ export type SkillId =
   | 'bothNeighborsPlay' // 两邻出牌
   | 'darkBladeScout' // 暗刃侦查
   | 'replacePlayedCard' // 换牌
-  | 'peekHand'; // 窥牌
+  | 'peekHand' // 窥牌
+  // ---- 2025 扩充包新增 ----
+  | 'forcePass' // 指定不可出牌
+  | 'randomPlay' // 本轮随机出牌（自愿出牌、牌由系统抽）
+  | 'twoLapPlay' // 出牌问两圈
+  | 'trioPlay' // 集合同出（自己 + 至多两名）
+  | 'preShufflePick' // 洗牌前指定未出牌者随机补出
+  | 'bishopMustPlay' // 司教有牌必须出牌（身份隐藏）
+  | 'noGhost' // 不能出幽魂
+  | 'earlyReveal'; // 出到第 3 张就混洗开牌
 
 export interface SkillDef {
   id: SkillId;
@@ -126,10 +137,65 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     text: '随机查看指定玩家的一张手牌',
     targets: 'oneOther',
   },
+  // ---- 2025 扩充包 ----
+  forcePass: {
+    id: 'forcePass',
+    name: '禁止出牌',
+    text: '指定一至两名玩家，本轮不可出牌（8 人局以上指定 2 名）',
+    targets: 'oneOrTwoOthers',
+  },
+  randomPlay: {
+    id: 'randomPlay',
+    name: '随机出牌',
+    text: '本轮所有玩家出牌时由系统随机抽牌（仍可自愿跳过）',
+    targets: 'none',
+  },
+  twoLapPlay: {
+    id: 'twoLapPlay',
+    name: '双重出牌',
+    text: '本轮出牌进行两圈，每人有两次出牌机会（可跳过）',
+    targets: 'none',
+  },
+  trioPlay: {
+    id: 'trioPlay',
+    name: '同出',
+    text: '指定至多两名有手牌的玩家与你一同出牌（集合内每人各出 1 张）',
+    targets: 'oneOrTwoOthersWithCards',
+  },
+  preShufflePick: {
+    id: 'preShufflePick',
+    name: '洗牌前补出',
+    text: '公开前指定一名未出牌的玩家随机补出 1 张牌（匿名混入）',
+    targets: 'none',
+  },
+  bishopMustPlay: {
+    id: 'bishopMustPlay',
+    name: '司教无保留',
+    text: '本轮司教若持有手牌则必须出牌（身份保持隐藏）',
+    targets: 'none',
+  },
+  noGhost: {
+    id: 'noGhost',
+    name: '禁幽魂',
+    text: '本轮任何玩家都不能打出幽魂牌',
+    targets: 'none',
+  },
+  earlyReveal: {
+    id: 'earlyReveal',
+    name: '三张即开',
+    text: '本轮第 3 张牌落牌后立即混洗公开',
+    targets: 'none',
+  },
 };
 
 /**
- * 水晶编号 -> 技能。
+ * 技能组（loadout）：水晶槽 1-12 → 技能 id。同一技能可占多个槽位（如初版 1≡12）。
+ * 随对局保存在 `GameState.skills`，是本局唯一的技能权威。
+ */
+export type SkillLoadout = Record<number, SkillId>;
+
+/**
+ * 水晶编号 -> 技能（初版映射的字面量）。
  *
  * 编号只是技能指针，与发动顺序无关：每名玩家持有一枚水晶，
  * 每枚水晶只发动一次，因此 N 人局恰好 N 轮，每轮由受币者发动自己的水晶。
@@ -150,8 +216,102 @@ export const CRYSTAL_TO_SKILL: Record<number, SkillId> = {
   12: 'forcePlay',
 };
 
-export function skillOfCrystal(crystal: number): SkillId {
-  const skill = CRYSTAL_TO_SKILL[crystal];
+/** 初版技能组（与 CRYSTAL_TO_SKILL 一致） */
+export const LOADOUT_BASE: SkillLoadout = CRYSTAL_TO_SKILL;
+
+/** 2025 扩充包技能组（10 个技能、12 槽；11≡2、12≡1 为刻意复用） */
+export const LOADOUT_2025: SkillLoadout = {
+  1: 'forcePlay',
+  2: 'forcePass',
+  3: 'randomPlay',
+  4: 'twoLapPlay',
+  5: 'trioPlay',
+  6: 'preShufflePick',
+  7: 'goLast',
+  8: 'bishopMustPlay',
+  9: 'noGhost',
+  10: 'earlyReveal',
+  11: 'forcePass',
+  12: 'forcePlay',
+};
+
+/** 具名预设技能组（房间面板展示、热座选择用） */
+export interface LoadoutPreset {
+  id: string;
+  name: string;
+  loadout: SkillLoadout;
+}
+
+export const LOADOUT_PRESETS: LoadoutPreset[] = [
+  { id: 'base', name: '初版', loadout: LOADOUT_BASE },
+  { id: '2025', name: '2025 扩充包', loadout: LOADOUT_2025 },
+];
+
+/** 技能组的字面量签名（按槽序拼接），用于比较两套技能组是否一致 */
+export function loadoutSignature(loadout: SkillLoadout): string {
+  return CRYSTAL_NUMBERS.map((slot) => loadout[slot] ?? '?').join(',');
+}
+
+/** 两套技能组是否一致 */
+export function sameLoadout(a: SkillLoadout | null | undefined, b: SkillLoadout | null | undefined): boolean {
+  if (!a || !b) return a === b;
+  return loadoutSignature(a) === loadoutSignature(b);
+}
+
+/** 命中预设时返回预设 id（如 base / 2025），否则返回 null */
+export function loadoutPresetId(loadout: SkillLoadout): string | null {
+  const hit = LOADOUT_PRESETS.find((preset) => sameLoadout(preset.loadout, loadout));
+  return hit?.id ?? null;
+}
+
+/**
+ * 校验技能组：必须恰好是 1-12 这 12 个槽，每槽都是已知技能 id。
+ * 返回错误信息；null 表示合法。供服务器入参校验与引擎兜底共用。
+ */
+export function validateLoadout(loadout: unknown): string | null {
+  if (typeof loadout !== 'object' || loadout === null || Array.isArray(loadout)) {
+    return '技能组必须是一个对象';
+  }
+  const record = loadout as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    const slot = Number(key);
+    // 只认「1」-「12」这种规范数字键：__proto__、01、13 之类一律拒绝
+    if (!/^\d+$/.test(key) || String(slot) !== key || !CRYSTAL_NUMBERS.includes(slot)) {
+      return `技能组包含非法槽位：${key}`;
+    }
+  }
+  for (const slot of CRYSTAL_NUMBERS) {
+    const value = record[String(slot)];
+    // 只认 SKILLS 自有键，避免 constructor 之类原型链键蒙混过关
+    if (typeof value !== 'string' || !Object.prototype.hasOwnProperty.call(SKILLS, value)) {
+      return `水晶槽 ${slot} 未指定合法技能`;
+    }
+  }
+  return null;
+}
+
+/**
+ * 解析技能组（引擎侧兜底）：缺失或非法时回退初版。
+ * 返回全新对象，只含 1-12 这 12 个槽，不与被引用的入参对象共享。
+ */
+export function resolveLoadout(loadout?: unknown): SkillLoadout {
+  if (loadout === undefined || loadout === null || validateLoadout(loadout) !== null) {
+    return { ...LOADOUT_BASE };
+  }
+  const record = loadout as SkillLoadout;
+  const out: SkillLoadout = {};
+  CRYSTAL_NUMBERS.forEach((slot) => {
+    out[slot] = record[slot]!;
+  });
+  return out;
+}
+
+/**
+ * 按本局技能组查询水晶对应技能。
+ * loadout 缺省为初版（兼容旧调用），引擎 / 联机路径一律显式传 `state.skills`。
+ */
+export function skillOfCrystal(crystal: number, loadout: SkillLoadout = LOADOUT_BASE): SkillId {
+  const skill = loadout[crystal];
   if (!skill) throw new Error(`水晶 ${crystal} 没有对应的技能`);
   return skill;
 }

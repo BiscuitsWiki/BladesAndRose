@@ -3,15 +3,20 @@ import { Client } from 'boardgame.io/react';
 import { Local, SocketIO } from 'boardgame.io/multiplayer';
 import { useEffect, useMemo, useRef, useState, type ComponentType, type Dispatch, type SetStateAction } from 'react';
 import {
+  LOADOUT_BASE,
+  LOADOUT_PRESETS,
   ROLE_LABEL,
   ROLE_ORDER,
   WIN_THRESHOLDS,
   distributionSignature,
+  loadoutSignature,
   officialDistribution,
   parseDistribution,
+  sameLoadout,
   validateDistribution,
   type Distribution,
   type GameState,
+  type SkillLoadout,
 } from '../engine';
 import { Board } from './Board';
 import { AccountBar } from './AccountBar';
@@ -32,6 +37,7 @@ import {
   resetRoom,
   saveNickname,
   serverBase,
+  setRoomSkills,
   spectateHeartbeat,
   startRoom,
   transferHost,
@@ -172,6 +178,8 @@ function Lobby({
   initialRoom,
   notice,
   account,
+  loadout,
+  onLoadoutChange,
   onAccountChange,
   onResume,
   onPick,
@@ -183,6 +191,9 @@ function Lobby({
   notice?: string;
   /** 本机身份（游客 / 专属账号），显示在大厅顶部 */
   account: LocalAccount | null;
+  /** 热座技能组（联机对局采用房内技能组，与此无关） */
+  loadout: SkillLoadout;
+  onLoadoutChange: (loadout: SkillLoadout) => void;
   onAccountChange: (account: LocalAccount | null) => void;
   /** 注册 / 登录成功：查一查该 UID 有没有进行中的对局，有就拉回 */
   onResume: (account: LocalAccount) => void;
@@ -305,6 +316,20 @@ function Lobby({
 
       <h2>3 · 本地热座（调试）</h2>
       <div className="actions">
+        <span className="dim">技能组：</span>
+        {LOADOUT_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            className={`btn small${sameLoadout(loadout, preset.loadout) ? ' primary' : ''}`}
+            title={preset.id === '2025' ? '2025 扩充包技能表' : '初版技能表'}
+            onClick={() => onLoadoutChange(preset.loadout)}
+          >
+            {preset.name}
+          </button>
+        ))}
+        <span className="dim">（仅对本地热座生效；联机对局采用房内技能组）</span>
+      </div>
+      <div className="actions">
         {Array.from({ length: count }, (_, i) => (
           <button
             key={i}
@@ -424,6 +449,7 @@ function RoomPanel({
   onToggleTransfer,
   onTransferHost,
   onTakeSeat,
+  onSetSkills,
 }: {
   count: number;
   mySeat: string | null;
@@ -438,9 +464,14 @@ function RoomPanel({
   onToggleTransfer: () => void;
   onTransferHost: (seat: string) => void;
   onTakeSeat: (seat: string) => void;
+  /** 房主保存技能组（presetId 为预设标识，如 base / 2025）；保存前已由弹窗确认 */
+  onSetSkills: (presetId: string) => void;
 }) {
   const taken = Object.keys(info.seats).length;
   const hostLabel = info.hostSeat !== null ? `座位 ${Number(info.hostSeat) + 1}` : null;
+  /** 技能组修改：本地选中的预设；confirmSkill = 待二次确认的预设 id */
+  const [skillPick, setSkillPick] = useState<string | null>(null);
+  const [confirmSkill, setConfirmSkill] = useState<string | null>(null);
   return (
     <div className="panel">
       <h2>
@@ -508,6 +539,58 @@ function RoomPanel({
         观战席（{info.spectators.length}）
         {info.spectators.length > 0 ? `：${info.spectators.join('、')}` : '：暂无观战者'}
       </p>
+      <p className="dim">
+        技能组：<strong>{info.skillset?.name ?? '初版'}</strong>
+        {isHost && !started ? '（房主可修改；所有玩家无需刷新，牌桌会实时同步）' : ''}
+      </p>
+      {isHost && !started && (
+        <div className="actions">
+          <span className="dim">改为：</span>
+          {LOADOUT_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              className={`btn small${skillPick === preset.id ? ' primary' : ''}`}
+              onClick={() => setSkillPick(preset.id)}
+            >
+              {preset.name}
+            </button>
+          ))}
+          <button
+            className="btn small"
+            disabled={skillPick === null || skillPick === (info.skillset?.id ?? null)}
+            onClick={() => setConfirmSkill(skillPick)}
+          >
+            保存技能组
+          </button>
+        </div>
+      )}
+      {confirmSkill !== null && (
+        <div className="modal-mask" onClick={() => setConfirmSkill(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p>修改技能组只影响尚未开始的对局；所有玩家无需刷新，牌桌会实时同步。</p>
+            <div className="actions">
+              <button
+                className="btn primary"
+                onClick={() => {
+                  const presetId = confirmSkill;
+                  setConfirmSkill(null);
+                  onSetSkills(presetId);
+                }}
+              >
+                确认修改
+              </button>
+              <button className="btn" onClick={() => setConfirmSkill(null)}>
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {transferMode && (
         <p className="dim">点一个已入座的玩家，把房主转给他；再点「取消转移」即可退出。</p>
       )}
@@ -615,6 +698,9 @@ export function App() {
    * Board 随之重新挂载，标注放这里才不会因切换视角而丢失。
    */
   const [eyeMarks, setEyeMarks] = useState<Record<string, string[]>>({});
+
+  /** 热座技能组（默认初版）；联机对局由服务器经 setupData 决定，与此无关 */
+  const [hotseatLoadout, setHotseatLoadout] = useState<SkillLoadout>(() => ({ ...LOADOUT_BASE }));
 
   const official = isOfficialDistribution(setup.count, setup.distribution);
   const override = official ? null : setup.distribution;
@@ -830,12 +916,24 @@ export function App() {
    * 当前 client 只会收到自己的视图。对局本身不受影响：Local master 按 game 对象缓存，
    * 新建的 client 会重新同步到同一局。
    */
+  /**
+   * BoardGameClient 的重建钥匙：
+   *   - 热座：技能组签名（本地换技能组 = 换 game 对象与 master）；
+   *   - 联机：等待开局期间纳入房内技能组签名——房主改技能组后（服务器原地改写 G.skills、不清局），
+   *     各客户端轮询到 skillset 变化即重建连接并重新同步，牌桌随之刷新；开局后不再随技能组重建
+   *     （开局后也不允许改），避免开局瞬间多一次无谓重连。
+   */
+  const roomSkillsetKey =
+    roomInfo === null || roomInfo.started
+      ? 'online'
+      : `online:${roomInfo.skillset?.sig ?? roomInfo.skillset?.id ?? 'custom'}`;
+  const hotseatKey = setup.room === null ? loadoutSignature(hotseatLoadout) : roomSkillsetKey;
   const BoardGameClient = useMemo(
     () =>
       // boardgame.io 的 Client 组件会在运行时把额外 props 透传给 board，
       // 但类型上未开放，这里显式断言我们实际传入的 props
       Client({
-        game: getBladesAndRose(override),
+        game: getBladesAndRose(override, setup.room === null ? hotseatLoadout : null),
         board: Board as unknown as ComponentType<BoardProps<GameState>>,
         numPlayers: setup.count,
         // 有房间号 -> 联机模式，经房间服务器走 SocketIO；否则单页热座走 Local
@@ -853,7 +951,7 @@ export function App() {
         setEyeMarks: Dispatch<SetStateAction<Record<string, string[]>>>;
       }>,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [setup.count, overrideKey, setup.room, setup.seat],
+    [setup.count, overrideKey, setup.room, setup.seat, hotseatKey],
   );
 
   if (checkingGame) {
@@ -880,6 +978,8 @@ export function App() {
         initialRoom={setup.room}
         notice={lobbyNotice ?? undefined}
         account={account}
+        loadout={hotseatLoadout}
+        onLoadoutChange={setHotseatLoadout}
         onAccountChange={setAccount}
         onResume={(next) => {
           setAccount(next);
@@ -1057,6 +1157,28 @@ export function App() {
     }
   }
 
+  /**
+   * 房主修改房间技能组：服务器把新技能组原地写入等待中的对局（不清局、不踢人），
+   * 各客户端轮询到 skillset 签名变化后自动重连刷新牌桌，无需任何手动操作。
+   */
+  async function saveRoomSkills(presetId: string) {
+    if (setup.room === null || setup.seat === null || setup.credentials === null) return;
+    const preset = LOADOUT_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setRoomError(null);
+    try {
+      await setRoomSkills({
+        room: setup.room,
+        seat: setup.seat,
+        credentials: setup.credentials,
+        loadout: preset.loadout,
+      });
+      setRoomInfo(await fetchRoomInfo(setup.room));
+    } catch (failure) {
+      setRoomError((failure as Error).message);
+    }
+  }
+
   return (
     <>
       <div className="topbar">
@@ -1191,6 +1313,7 @@ export function App() {
           onToggleTransfer={() => setTransferMode((prev) => !prev)}
           onTransferHost={(seat) => void transferHostTo(seat)}
           onTakeSeat={(seat) => void takeSeat(seat)}
+          onSetSkills={(presetId) => void saveRoomSkills(presetId)}
         />
       )}
       {setup.room !== null && !started && (

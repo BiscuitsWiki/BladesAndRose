@@ -5,8 +5,10 @@ import {
   NIGHT_ROLES,
   ROLE_ORDER,
   resolveDistribution,
+  resolveLoadout,
   validateDistribution,
   type Distribution,
+  type SkillLoadout,
 } from './config';
 import { shuffleInPlace, nextInt } from './rng';
 import {
@@ -31,6 +33,8 @@ export interface SetupOptions {
   crystals?: Record<number, number>;
   /** 测试用：指定起始持币座位 */
   coinSeat?: number;
+  /** 本局技能组（水晶槽 1-12 → 技能 id）；缺失或非法回退初版（LOADOUT_BASE） */
+  loadout?: SkillLoadout;
 }
 
 let cardSeq = 0;
@@ -65,6 +69,7 @@ export function createGame(names: string[], opts: SetupOptions = {}): GameState 
 
   const state: GameState = {
     rngSeed: opts.seed ?? Math.floor(Math.random() * 0x7fffffff),
+    skills: resolveLoadout(opts.loadout),
     playerCount,
     players: [],
     order: [],
@@ -79,8 +84,10 @@ export function createGame(names: string[], opts: SetupOptions = {}): GameState 
     pendingRedraw: null,
     playOrder: [],
     turnIndex: 0,
+    lap: 1,
     playSequence: [],
     played: {},
+    extraPlays: {},
     passed: {},
     lastReveal: null,
     knowledge: {},
@@ -149,6 +156,7 @@ export function createGame(names: string[], opts: SetupOptions = {}): GameState 
   players.forEach((p) => {
     state.knowledge[p.id] = [];
     state.played[p.id] = null;
+    state.extraPlays[p.id] = [];
     state.passed[p.id] = false;
   });
 

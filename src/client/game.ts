@@ -4,11 +4,13 @@ import {
   ROLE_ORDER,
   applyMoveInPlace,
   createGame,
+  loadoutSignature,
   playerView as enginePlayerView,
   type Distribution,
   type GameState,
   type GameView,
   type Move as EngineMove,
+  type SkillLoadout,
 } from '../engine';
 
 /** 观众（未取座）使用一个不会匹配任何玩家的 id，playerView 因此只返回公开信息 */
@@ -35,8 +37,12 @@ function run(G: GameState, move: EngineMove): void | typeof INVALID_MOVE {
 /**
  * 用给定配比构造一个 boardgame.io game 对象。
  * override 为 null 表示完全使用官方配比（按实际人数取值）。
+ * loadout 为热座技能组（联机时由服务器经 setupData 带入，优先级更高）。
  */
-export function createBladesAndRose(override: Partial<Distribution> | null): Game<GameState> {
+export function createBladesAndRose(
+  override: Partial<Distribution> | null,
+  loadout: SkillLoadout | null = null,
+): Game<GameState> {
   return {
     name: gameNameOf(override),
     minPlayers: 5,
@@ -60,13 +66,16 @@ export function createBladesAndRose(override: Partial<Distribution> | null): Gam
       activePlayers: { all: true } as unknown as ActivePlayersArg,
     },
 
-    setup: ({ ctx }) => {
+    setup: ({ ctx }, setupData) => {
       const count = ctx.numPlayers;
       const names = Array.from({ length: count }, (_, i) => `玩家 ${i + 1}`);
+      // 联机：服务器把房内技能组经 setupData 带入（唯一权威）；热座：本地构造时直接指定
+      const setupLoadout = (setupData as { loadout?: SkillLoadout } | undefined)?.loadout;
       return createGame(names, {
         // 引擎玩家 id 与 boardgame.io 的 playerID 完全一致，省掉一层映射
         playerIds: Array.from({ length: count }, (_, i) => String(i)),
         distribution: override,
+        loadout: setupLoadout ?? loadout ?? undefined,
       });
     },
 
@@ -105,10 +114,29 @@ export function createBladesAndRose(override: Partial<Distribution> | null): Gam
           run(G, { type: 'playCard', playerId: toPlayerId(playerID), cardId }),
       },
 
+      /** 3 号扩充：随机出牌轮——玩家选择出牌，牌由引擎随机抽（不接受 cardId） */
+      playRandom: {
+        noLimit: true,
+        client: false,
+        move: ({ G, playerID }) => run(G, { type: 'playRandom', playerId: toPlayerId(playerID) }),
+      },
+
       passTurn: {
         noLimit: true,
         client: false,
         move: ({ G, playerID }) => run(G, { type: 'passTurn', playerId: toPlayerId(playerID) }),
+      },
+
+      /** 6 号扩充：公开前指定一名未出牌玩家随机补出一张 */
+      pickPreShuffleTarget: {
+        noLimit: true,
+        client: false,
+        move: ({ G, playerID }, targetId: string) =>
+          run(G, {
+            type: 'pickPreShuffleTarget',
+            playerId: toPlayerId(playerID),
+            targetId,
+          }),
       },
 
       resolveRedraw: {
@@ -171,11 +199,15 @@ const gameCache = new Map<string, Game<GameState>>();
  *   - 相同配比返回同一个对象 → 复用同一个 master → 重设后回到同一配比能继续原局；
  *   - 不同配比返回新对象 → 全新的 master → 不会读到旧配比遗留的对局状态。
  */
-export function getBladesAndRose(override: Partial<Distribution> | null): Game<GameState> {
-  const key = gameNameOf(override);
+export function getBladesAndRose(
+  override: Partial<Distribution> | null,
+  loadout: SkillLoadout | null = null,
+): Game<GameState> {
+  // 技能组不同的热座对局必须用不同的 game 对象（否则 Local 传输器会复用同一个 master）
+  const key = loadout ? `${gameNameOf(override)}|${loadoutSignature(loadout)}` : gameNameOf(override);
   let game = gameCache.get(key);
   if (!game) {
-    game = createBladesAndRose(override);
+    game = createBladesAndRose(override, loadout);
     gameCache.set(key, game);
   }
   return game;

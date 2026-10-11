@@ -19,7 +19,7 @@
  */
 import { Client } from 'boardgame.io/client';
 import { SocketIO } from 'boardgame.io/multiplayer';
-import type { Distribution } from '../engine';
+import type { Distribution, SkillLoadout } from '../engine';
 import { gameNameOf, getBladesAndRose } from './game';
 
 /** 与 src/server/dev-server.ts 的 PORT 保持一致（仅开发模式使用） */
@@ -118,6 +118,8 @@ export interface RoomInfo {
   name: string;
   /** 是否已开局：房主点「开始游戏」后为 true，此前界面只显示座位面板 */
   started: boolean;
+  /** 房内技能组（展示用）：id 为预设标识（base / 2025），未命中预设时为 null；sig 为技能组签名（客户端据此检测变化后重连刷新） */
+  skillset: { id: string | null; name: string; sig?: string };
   /** 当前房主的座位号；null = 尚未推得（新房间 / 刚重开）。房主与座位号无关，只是恰好坐在某个座位上 */
   hostSeat: string | null;
   /** 留存期：房间信息还在但没有在座在线的玩家。房间码仍有效——进入会重新开局，第一位入座者成为房主 */
@@ -189,6 +191,9 @@ async function claimSeatOnce(opts: {
   uid: string;
   playerName: string;
   credentials: string | null;
+  /** 对局不存在时，服务器按这两个参数与房内技能组建局（见 dev-server 的 /seat-claim） */
+  count: number;
+  gameName: string;
 }): Promise<ClaimOutcome> {
   let response: Response;
   try {
@@ -198,6 +203,8 @@ async function claimSeatOnce(opts: {
       uid: opts.uid,
       playerName: opts.playerName,
       credentials: opts.credentials ?? undefined,
+      count: opts.count,
+      gameName: opts.gameName,
     });
   } catch {
     return { kind: 'error', message: '连接房间服务器失败，请确认已运行 npm run dev:server' };
@@ -230,10 +237,10 @@ export async function claimSeat(opts: {
 }): Promise<string> {
   const gameName = gameNameOf(opts.override);
   const existing = loadCredentials(gameName, opts.room, opts.seat);
-  let outcome = await claimSeatOnce({ ...opts, credentials: existing });
+  let outcome = await claimSeatOnce({ ...opts, credentials: existing, gameName });
   if (outcome.kind === 'no-match') {
     await createRoom(opts.room, opts.count, opts.override);
-    outcome = await claimSeatOnce({ ...opts, credentials: existing });
+    outcome = await claimSeatOnce({ ...opts, credentials: existing, gameName });
   }
   if (outcome.kind === 'claimed') {
     saveCredentials(gameName, opts.room, opts.seat, outcome.credentials);
@@ -256,6 +263,28 @@ export async function renameRoom(opts: {
     name: opts.name,
   });
   if (!response.ok) throw new Error(`修改房间名失败（HTTP ${response.status}）`);
+}
+
+/**
+ * 房主修改房间技能组：仅房主、仅未开局可用（对局中请先「重开」）。
+ * 修改会清空当前等待中的对局数据，玩家刷新重进即按新技能组重建对局。
+ */
+export async function setRoomSkills(opts: {
+  room: string;
+  seat: string;
+  credentials: string;
+  loadout: SkillLoadout;
+}): Promise<void> {
+  const response = await postJson(`${serverBase()}/room-skills`, {
+    matchID: opts.room,
+    playerID: opts.seat,
+    credentials: opts.credentials,
+    loadout: opts.loadout,
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? `修改技能组失败（HTTP ${response.status}）`);
+  }
 }
 
 /** 房主开局：服务器置 `started` 后，各客户端轮询到才显示牌桌 */
@@ -361,10 +390,10 @@ export async function joinRoom({
   // 有 UID：走 /seat-claim —— 服务器按「座位 → UID」绑定判定，能收回自己的座位
   if (uid) {
     const existing = loadCredentials(gameName, room, seat);
-    let outcome = await claimSeatOnce({ room, seat, uid, playerName: nickname, credentials: existing });
+    let outcome = await claimSeatOnce({ room, seat, uid, playerName: nickname, credentials: existing, count, gameName });
     if (outcome.kind === 'no-match') {
       await createRoom(room, count, override);
-      outcome = await claimSeatOnce({ room, seat, uid, playerName: nickname, credentials: existing });
+      outcome = await claimSeatOnce({ room, seat, uid, playerName: nickname, credentials: existing, count, gameName });
     }
     if (outcome.kind === 'claimed') {
       saveCredentials(gameName, room, seat, outcome.credentials);

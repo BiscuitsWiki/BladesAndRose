@@ -3,14 +3,13 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import {
   ROLE_LABEL,
   SKILLS,
-  skillOfCrystal,
   type Card,
   type Faction,
   type GameView,
   type Phase,
   type PlayerViewEntry,
 } from '../engine';
-import { canResolveRedraw, handActions } from './boardActions';
+import { canRandomPlay, canResolveRedraw, handActions } from './boardActions';
 import { avatarColor } from './avatar';
 import { CardChip, CardMark, cardLabel } from './cards';
 import { RevealStage } from './RevealStage';
@@ -20,6 +19,7 @@ const PHASE_LABEL: Record<Phase, string> = {
   magic: '阶段一 · 传币并发动魔法',
   magicTargets: '阶段一 · 选择魔法目标',
   play: '阶段二 · 出牌',
+  prePick: '公开前 · 指定补出者',
   redraw: '公开前换牌',
   finished: '游戏结束',
 };
@@ -139,9 +139,10 @@ export function Board({
   const revealOwners = new Map(
     Object.entries(lastReveal?.byPlayer ?? {}).map(([id, card]) => [card.id, id]),
   );
-  /** 本轮发动的水晶与技能；尚未发动时 crystalTrack 还没有这一轮的条目 */
+  /** 本轮发动的水晶与技能；尚未发动时 crystalTrack 还没有这一轮的条目（技能从 G.skills 派生） */
   const roundCrystal = G.crystalTrack.at(G.round - 1);
-  const roundSkill = roundCrystal ? SKILLS[skillOfCrystal(roundCrystal.value)] : null;
+  const roundSkillId = roundCrystal ? G.skills[roundCrystal.value] : undefined;
+  const roundSkill = roundSkillId ? SKILLS[roundSkillId] : null;
   /** 换牌挂起时阶段行改用换牌表述（此时仍是 play 阶段，但动作不是出牌） */
   const phaseLabel = G.pendingRedraw ? '换牌阶段（10 号）' : PHASE_LABEL[G.phase];
 
@@ -170,8 +171,9 @@ export function Board({
     return value === undefined ? '' : String(value);
   }
 
-  /** 自己那枚水晶对应的技能：编号只是指针，玩家看不到技能时就无从决策 */
-  const mySkill = me?.crystal === undefined ? null : SKILLS[skillOfCrystal(me.crystal)];
+  /** 自己那枚水晶对应的技能：编号只是指针，玩家看不到技能时就无从决策（技能从 G.skills 派生） */
+  const mySkillId = me?.crystal === undefined ? undefined : G.skills[me.crystal];
+  const mySkill = mySkillId ? SKILLS[mySkillId] : null;
 
   function toggleTarget(id: string) {
     const need = G.pendingMagic?.needTargets ?? 1;
@@ -186,16 +188,11 @@ export function Board({
     }
   }
 
-  const targetSpec = G.pendingMagic?.targets;
-  // 只有 oneAny（7 号获得幽魂）允许把自己作为目标
-  const allowSelf = targetSpec === 'oneAny';
-  const candidates = G.players.filter((p) => {
-    if (p.id === playerID && !allowSelf) return false;
-    if (targetSpec === 'oneOtherWithCards' || targetSpec === 'twoOthersWithCards') {
-      return p.handCount > 0;
-    }
-    return true;
-  });
+  // 动态目标池：由引擎按本局实况解析并下发（含扩充技能），UI 只允许从池内选人
+  const targetPool = G.pendingMagic?.pool ?? [];
+  const candidates = G.players.filter((p) => targetPool.includes(p.id));
+  /** 扩充 6 号（公开前补出）：可选对象 = 未出牌且有手牌者 */
+  const prePickPool = G.phase === 'prePick' ? (G.modifiers.pendingPick?.pool ?? []) : [];
 
   const redrawCandidates = G.players.filter(
     (p) => p.id !== playerID && p.played && p.handCount > 0,
@@ -223,6 +220,7 @@ export function Board({
           const selectable =
             (G.phase === 'magic' && isMyTurn && !p.crystalPlaced) ||
             (G.phase === 'magicTargets' && isMyTurn && candidates.some((c) => c.id === p.id)) ||
+            (G.phase === 'prePick' && isMyTurn && prePickPool.includes(p.id)) ||
             (G.phase === 'redraw' && isMyTurn && redrawCandidates.some((c) => c.id === p.id));
 
           // 睁眼玩家视角：整列由系统标注（组内=睁眼、组外=未睁眼），不允许修改；
@@ -266,6 +264,7 @@ export function Board({
                 onClick={() => {
                   if (G.phase === 'magic') moves.passCoin(p.id);
                   else if (G.phase === 'magicTargets') toggleTarget(p.id);
+                  else if (G.phase === 'prePick') moves.pickPreShuffleTarget(p.id);
                   else if (G.phase === 'redraw') moves.resolveRedraw(p.id);
                 }}
               >
@@ -336,6 +335,11 @@ export function Board({
     }
     if (G.phase === 'magicTargets' && G.pendingMagic) {
       const magic = G.pendingMagic;
+      if (magic.needTargets === 0) {
+        return isMyTurn
+          ? `轮到你：为【${magic.name}】选择目标——当前没有可选目标，确认即可。`
+          : `等待 ${nameOf(magic.chooser)} 为【${magic.name}】指定目标…`;
+      }
       return isMyTurn
         ? `轮到你：为【${magic.name}】选择 ${magic.needTargets} 名目标（已选 ${pickedTargets.length}）。`
         : `等待 ${nameOf(magic.chooser)} 为【${magic.name}】指定目标…`;
@@ -348,9 +352,21 @@ export function Board({
       }
       if (!isMyTurn) return `等待 ${nameOf(G.currentActor ?? '')} 出牌或跳过…`;
       if (G.modifiers.mustPass.includes(playerID ?? '')) return '轮到你：本回合必须跳过。';
+      if (G.modifiers.randomPlay) {
+        return '轮到你：本回合出牌由系统随机抽取——点击「随机出牌」；也可以选择跳过。';
+      }
+      if (G.modifiers.bishopMustPlay && me?.role === 'bishop' && (me.handCount ?? 0) > 0) {
+        return '轮到你：本轮（司教持有手牌）必须出牌——点击你的手牌选中，再确认出牌。';
+      }
       return G.modifiers.mustPlay.includes(playerID ?? '')
         ? '轮到你：本回合必须出牌——点击你的手牌选中，再确认出牌。'
         : '轮到你：点击你的手牌选中，再确认出牌；也可以选择跳过。';
+    }
+    if (G.phase === 'prePick') {
+      const pick = G.modifiers.pendingPick;
+      return isMyTurn
+        ? '轮到你：指定一名尚未出牌的玩家，在公开前随机补出一张牌（匿名混入）。'
+        : `等待 ${nameOf(pick?.chooser ?? '')} 指定补出者…`;
     }
     if (G.phase === 'redraw') {
       return isMyTurn
@@ -362,6 +378,16 @@ export function Board({
 
   /** 操作按钮：出牌阶段的动作都在手牌区，玩家区只剩换牌阶段的「放弃换牌」 */
   function renderActions() {
+    // 扩充技能可能出现「没有可选目标」（如 5 号技能目标池为空）：确认后按空集合结算
+    if (G.phase === 'magicTargets' && isMyTurn && (G.pendingMagic?.needTargets ?? 1) === 0) {
+      return (
+        <div className="actions tight">
+          <button className="btn primary" onClick={() => moves.resolveMagicTargets([])}>
+            没有可选目标，确认
+          </button>
+        </div>
+      );
+    }
     if (!canResolveRedraw(G, playerID)) return null;
     return (
       <div className="actions tight">
@@ -508,7 +534,8 @@ export function Board({
         </div>
         <p className="step">{stepText()}</p>
         <p className="meta dim">
-          第 {G.round} 轮 · {phaseLabel} · 持币：{nameOf(G.coinHolder)}
+          第 {G.round} 轮 · {phaseLabel}
+          {G.modifiers.laps === 2 ? `（出牌第 ${G.lap}/2 圈）` : ''} · 持币：{nameOf(G.coinHolder)}
         </p>
         <h3 className="col-head">轮次</h3>
         <div className="crystal-track">
@@ -624,12 +651,17 @@ export function Board({
           )}
           <div className="hand">
             {(me.hand ?? []).map((c) => {
-              const playable = G.phase === 'play' && isMyTurn && !G.modifiers.mustPass.includes(playerID ?? '');
+              const canHandAct =
+                G.phase === 'play' && isMyTurn && !G.modifiers.mustPass.includes(playerID ?? '');
+              // 3 号扩充：随机出牌轮不能选牌（牌由引擎抽）；9 号扩充：幽魂不可出
+              const ghostLocked = G.modifiers.noGhost && c.kind === 'ghost';
+              const playable = canHandAct && !G.modifiers.randomPlay && !ghostLocked;
               return (
                 <button
                   key={c.id}
                   className={`card${pickedCardId === c.id ? ' selected' : ''}`}
                   disabled={!playable}
+                  title={ghostLocked ? '本轮不能打出幽魂牌' : undefined}
                   onClick={() =>
                     setPickedCardId((prev) => {
                       if (prev === c.id) return prev;
@@ -643,11 +675,21 @@ export function Board({
               );
             })}
           </div>
+          {G.modifiers.bishopMustPlay && me.role === 'bishop' && (me.handCount ?? 0) > 0 && (
+            <p className="skill-note">
+              <span className="dim">本轮司教若持有手牌必须出牌（规则公开，身份不公开）</span>
+            </p>
+          )}
           {handOps && (
             <div className="actions">
               {handOps.canGoLast && (
                 <button className="btn" onClick={() => moves.chooseGoLast()}>
                   我要最后行动
+                </button>
+              )}
+              {canRandomPlay(G, playerID) && (
+                <button className="btn primary" onClick={() => moves.playRandom()}>
+                  随机出牌
                 </button>
               )}
               {handOps.canConfirm && (

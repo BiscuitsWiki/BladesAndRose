@@ -1,5 +1,6 @@
-import { SKILLS, WIN_THRESHOLDS, type MagicTargetSpec, type SkillId } from './config';
+import { SKILLS, WIN_THRESHOLDS, type MagicTargetSpec, type SkillId, type SkillLoadout } from './config';
 import { currentActor } from './game';
+import { resolveTargets } from './magic';
 import { countBuds } from './round';
 import { BLADE_ROLES, type BladeRole, type Card, type Faction, type GameState, type Knowledge, type Phase, type PlayerId, type RevealResult, type Role } from './types';
 
@@ -62,6 +63,10 @@ export interface GameView {
   deathBuds: number;
   crystalTrack: { player: PlayerId; value: number }[];
   crystalsPlaced: number;
+  /** 本局技能组（12 槽）；技能文案一律由它派生，客户端不自行推断 */
+  skills: SkillLoadout;
+  /** 当前圈次（4 号扩充的两圈出牌；默认 1） */
+  lap: number;
   pendingMagic: {
     crystal: number;
     skill: SkillId;
@@ -71,6 +76,8 @@ export interface GameView {
     needTargets: number;
     /** 目标约束，UI 据此过滤可选玩家 */
     targets: MagicTargetSpec;
+    /** 动态目标池（本局实况解析，含扩充技能）：UI 只允许从这里选人 */
+    pool: PlayerId[];
   } | null;
   /** 10 号换牌挂起：等待该玩家自己完成对调（公开信息） */
   pendingRedraw: PlayerId | null;
@@ -83,6 +90,18 @@ export interface GameView {
     goLastOption: PlayerId | null;
     goLastUsed: boolean;
     redrawOption: PlayerId | null;
+    /** 扩充 3 号：本轮出牌由系统随机抽 */
+    randomPlay: boolean;
+    /** 扩充 4 号：出牌圈数 */
+    laps: 1 | 2;
+    /** 扩充 5 号：收窄后的出牌集合 */
+    trio: PlayerId[] | null;
+    /** 扩充 8 号：司教持牌必须出牌（规则旗标，不含玩家名单） */
+    bishopMustPlay: boolean;
+    /** 扩充 9 号：禁出幽魂 */
+    noGhost: boolean;
+    /** 扩充 6 号：公开前补出的待选状态（pool 为空表示尚未进入决策） */
+    pendingPick: { chooser: PlayerId; pool: PlayerId[] } | null;
   };
   lastReveal: RevealResult | null;
   knowledge: Knowledge[];
@@ -98,6 +117,8 @@ export interface GameView {
 export function playerView(state: GameState, viewerId: PlayerId): GameView {
   const thresholds = WIN_THRESHOLDS[state.playerCount]!;
   const pending = state.pendingMagic;
+  /** 待选技能的目标池与必选数（按本局实况解析，含扩充技能；旧字段 needTargets/targets 语义不变） */
+  const pendingTargets = pending ? resolveTargets(state, pending.skill, pending.chooser) : null;
 
   return {
     viewer: viewerId,
@@ -150,6 +171,8 @@ export function playerView(state: GameState, viewerId: PlayerId): GameView {
     deathBuds: countBuds(state.zones.death),
     crystalTrack: state.crystalTrack.map((t) => ({ ...t })),
     crystalsPlaced: state.crystalsPlaced,
+    skills: { ...state.skills },
+    lap: state.lap,
     pendingMagic: pending
       ? {
           crystal: pending.crystal,
@@ -157,8 +180,9 @@ export function playerView(state: GameState, viewerId: PlayerId): GameView {
           name: SKILLS[pending.skill].name,
           text: SKILLS[pending.skill].text,
           chooser: pending.chooser,
-          needTargets: SKILLS[pending.skill].targets === 'twoOthersWithCards' ? 2 : 1,
+          needTargets: pendingTargets!.need,
           targets: SKILLS[pending.skill].targets,
+          pool: [...pendingTargets!.pool],
         }
       : null,
     pendingRedraw: state.pendingRedraw,
@@ -171,6 +195,14 @@ export function playerView(state: GameState, viewerId: PlayerId): GameView {
       goLastOption: state.modifiers.goLastOption,
       goLastUsed: state.modifiers.goLastUsed,
       redrawOption: state.modifiers.redrawOption,
+      randomPlay: state.modifiers.randomPlay,
+      laps: state.modifiers.laps,
+      trio: state.modifiers.trio ? [...state.modifiers.trio] : null,
+      bishopMustPlay: state.modifiers.bishopMustPlay,
+      noGhost: state.modifiers.noGhost,
+      pendingPick: state.modifiers.pendingPick
+        ? { chooser: state.modifiers.pendingPick.chooser, pool: [...state.modifiers.pendingPick.pool] }
+        : null,
     },
     lastReveal: state.lastReveal
       ? {

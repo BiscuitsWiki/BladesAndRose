@@ -16,7 +16,11 @@ export function resolveReveal(state: GameState): void {
     ...state.players.map((p) => p.id).filter((id) => !acted.includes(id)),
   ].filter((id) => state.played[id]);
 
-  const entries = orderedIds.map((id) => ({ id, card: state.played[id]! }));
+  // 4 号扩充：同一玩家可能打出多张（两圈），按玩家出牌顺序展开成逐张条目
+  const entries = orderedIds.flatMap((id) => [
+    { id, card: state.played[id]! },
+    ...(state.extraPlays[id] ?? []).map((card) => ({ id, card })),
+  ]);
 
   const byPlayer: Record<string, Card> = {};
   entries.forEach((e) => {
@@ -135,9 +139,11 @@ export function startNextRound(state: GameState): void {
   state.pendingRedraw = null;
   state.playOrder = [];
   state.turnIndex = 0;
+  state.lap = 1;
   state.playSequence = [];
   state.players.forEach((p) => {
     state.played[p.id] = null;
+    state.extraPlays[p.id] = [];
     state.passed[p.id] = false;
   });
   state.log.push(`—— 第 ${state.round} 轮开始，持币者：${playerName(state, state.coinHolder)} ——`);
