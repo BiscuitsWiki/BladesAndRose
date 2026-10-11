@@ -17,13 +17,13 @@ describe('UID 类型判定（客户端，与服务端同规则）', () => {
 });
 
 describe('身份文案（uidLabel）', () => {
-  it('专属账号显示用户名与 9 位位数', () => {
+  it('专属账号显示用户名与 UID（不显示位数）', () => {
     expect(uidLabel({ uid: '123456789', kind: 'account', username: 'Alice' })).toBe(
-      '专属账号「Alice」· UID 123456789（9 位）',
+      '专属账号「Alice」· UID 123456789',
     );
   });
 
-  it('游客显示 10 位位数', () => {
-    expect(uidLabel({ uid: '1000000001', kind: 'guest' })).toBe('游客 · UID 1000000001（10 位）');
+  it('游客显示身份与 UID（不显示位数）', () => {
+    expect(uidLabel({ uid: '1000000001', kind: 'guest' })).toBe('游客 · UID 1000000001');
   });
 });

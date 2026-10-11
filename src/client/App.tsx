@@ -9,6 +9,7 @@ import {
   ROLE_ORDER,
   WIN_THRESHOLDS,
   distributionSignature,
+  loadoutEntries,
   loadoutSignature,
   officialDistribution,
   parseDistribution,
@@ -321,7 +322,7 @@ function Lobby({
           <button
             key={preset.id}
             className={`btn small${sameLoadout(loadout, preset.loadout) ? ' primary' : ''}`}
-            title={preset.id === '2025' ? '2025 扩充包技能表' : '初版技能表'}
+            title={`${preset.name}技能表：${loadoutSummary(preset.loadout)}`}
             onClick={() => onLoadoutChange(preset.loadout)}
           >
             {preset.name}
@@ -329,6 +330,7 @@ function Lobby({
         ))}
         <span className="dim">（仅对本地热座生效；联机对局采用房内技能组）</span>
       </div>
+      <LoadoutChips loadout={loadout} />
       <div className="actions">
         {Array.from({ length: count }, (_, i) => (
           <button
@@ -435,6 +437,30 @@ function CopyButton({
   );
 }
 
+/**
+ * 技能组明细：把一套技能组展开成「水晶槽 + 技能名」小标签（悬停显示该技能效果），
+ * 让玩家看到技能组具体装配了哪些技能，而不只是「初版 / 2025 扩充包」的名字。
+ */
+function LoadoutChips({ loadout }: { loadout: SkillLoadout }) {
+  return (
+    <div className="loadout-chips">
+      {loadoutEntries(loadout).map((entry) => (
+        <span key={entry.slot} className="chip" title={entry.text || undefined}>
+          <b>{entry.slot}</b>
+          {entry.name}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** 技能组明细的单行文本（用于按钮悬停提示）：如「1 强制出牌 · 2 顺序公开 · …」 */
+function loadoutSummary(loadout: SkillLoadout): string {
+  return loadoutEntries(loadout)
+    .map((entry) => `${entry.slot} ${entry.name}`)
+    .join(' · ');
+}
+
 /** 房间面板：座位格子（空位点击入座 / 换座）、观战席、房主的「开始游戏」与「转移房主」 */
 function RoomPanel({
   count,
@@ -469,9 +495,13 @@ function RoomPanel({
 }) {
   const taken = Object.keys(info.seats).length;
   const hostLabel = info.hostSeat !== null ? `座位 ${Number(info.hostSeat) + 1}` : null;
+  /** 房内技能组对应的预设（命中时用于展示明细；未命中预设则无从得知槽位，不展示） */
+  const roomLoadout = LOADOUT_PRESETS.find((preset) => preset.id === info.skillset?.id)?.loadout ?? null;
   /** 技能组修改：本地选中的预设；confirmSkill = 待二次确认的预设 id */
   const [skillPick, setSkillPick] = useState<string | null>(null);
   const [confirmSkill, setConfirmSkill] = useState<string | null>(null);
+  /** 房主选中但尚未保存的预设（用于预览明细） */
+  const pickedPreset = LOADOUT_PRESETS.find((preset) => preset.id === skillPick) ?? null;
   return (
     <div className="panel">
       <h2>
@@ -543,6 +573,7 @@ function RoomPanel({
         技能组：<strong>{info.skillset?.name ?? '初版'}</strong>
         {isHost && !started ? '（房主可修改；所有玩家无需刷新，牌桌会实时同步）' : ''}
       </p>
+      {roomLoadout && <LoadoutChips loadout={roomLoadout} />}
       {isHost && !started && (
         <div className="actions">
           <span className="dim">改为：</span>
@@ -550,6 +581,7 @@ function RoomPanel({
             <button
               key={preset.id}
               className={`btn small${skillPick === preset.id ? ' primary' : ''}`}
+              title={`${preset.name}技能表：${loadoutSummary(preset.loadout)}`}
               onClick={() => setSkillPick(preset.id)}
             >
               {preset.name}
@@ -562,6 +594,12 @@ function RoomPanel({
           >
             保存技能组
           </button>
+        </div>
+      )}
+      {isHost && !started && pickedPreset && (
+        <div className="loadout-preview">
+          <span className="dim">待保存的「{pickedPreset.name}」：</span>
+          <LoadoutChips loadout={pickedPreset.loadout} />
         </div>
       )}
       {confirmSkill !== null && (
@@ -1262,8 +1300,10 @@ export function App() {
               {setup.seat === null ? '观战中' : `你的座位：座位 ${Number(setup.seat) + 1}`}
             </span>
             {account !== null && (
-              <span className="room-chip" title="你的玩家 UID（游客 10 位 / 专属账号 9 位）">
-                <span className="dim">UID {account.uid}</span>
+              <span className="room-chip" title="你的玩家 UID">
+                <span className="dim">
+                  {account.kind === 'account' ? '专属账号' : '游客'} · UID {account.uid}
+                </span>
                 <CopyButton
                   label="复制 UID"
                   copied={copied === 'uid'}

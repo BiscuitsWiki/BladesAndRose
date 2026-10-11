@@ -4,6 +4,7 @@ import {
   LOADOUT_2025,
   LOADOUT_BASE,
   createGame,
+  loadoutEntries,
   resolveLoadout,
   sameLoadout,
   skillOfCrystal,
@@ -72,6 +73,16 @@ describe('技能组（loadout）数据模型', () => {
     expect(skillOfCrystal(3, LOADOUT_BASE)).toBe('rightNeighborRandom');
     expect(skillOfCrystal(3, LOADOUT_2025)).toBe('randomPlay');
     expect(skillOfCrystal(1, LOADOUT_2025)).toBe('forcePlay');
+  });
+
+  it('loadoutEntries 按槽序展开技能名（大厅 / 房间面板展示用）', () => {
+    const base = loadoutEntries(LOADOUT_BASE);
+    expect(base.map((entry) => entry.slot)).toEqual(CRYSTAL_NUMBERS);
+    expect(base[0].name).toBe('强制出牌');
+    expect(base[0].text).not.toBe('');
+    expect(loadoutEntries(LOADOUT_2025)[2].name).toBe('随机出牌');
+    // 指针非法时兜底为「未装配」，不抛异常
+    expect(loadoutEntries({ 1: 'forcePlay' } as typeof LOADOUT_BASE)[1].name).toBe('未装配');
   });
 });
 

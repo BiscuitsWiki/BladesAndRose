@@ -264,6 +264,25 @@ export function loadoutPresetId(loadout: SkillLoadout): string | null {
   return hit?.id ?? null;
 }
 
+/** 技能组明细条目：水晶槽、技能名与效果（供大厅 / 房间面板展示「具体有哪些技能」） */
+export interface LoadoutEntry {
+  slot: number;
+  name: string;
+  text: string;
+}
+
+/**
+ * 展开技能组明细（按水晶槽 1→12 顺序）。
+ * 预设技能组恒为合法；槽位指针非法时名称为「未装配」，只是兜底。
+ */
+export function loadoutEntries(loadout: SkillLoadout): LoadoutEntry[] {
+  return CRYSTAL_NUMBERS.map((slot) => {
+    const id = loadout[slot] as SkillId | undefined;
+    const def = id ? SKILLS[id] : undefined;
+    return { slot, name: def?.name ?? '未装配', text: def?.text ?? '' };
+  });
+}
+
 /**
  * 校验技能组：必须恰好是 1-12 这 12 个槽，每槽都是已知技能 id。
  * 返回错误信息；null 表示合法。供服务器入参校验与引擎兜底共用。

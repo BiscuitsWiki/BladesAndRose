@@ -37,13 +37,12 @@ export function uidKindOf(uid: string): AccountKind | null {
   return null;
 }
 
-/** 界面身份说明：「专属账号「Alice」· UID 123456789（9 位）」/「游客 · UID 1000000001（10 位）」 */
+/** 界面身份说明：「专属账号「Alice」· UID 123456789」/「游客 · UID 1000000001」 */
 export function uidLabel(account: LocalAccount): string {
-  const digits = account.uid.length;
   if (account.kind === 'account') {
-    return `专属账号「${account.username ?? ''}」· UID ${account.uid}（${digits} 位）`;
+    return `专属账号「${account.username ?? ''}」· UID ${account.uid}`;
   }
-  return `游客 · UID ${account.uid}（${digits} 位）`;
+  return `游客 · UID ${account.uid}`;
 }
 
 // ---------------------------------------------------------------- 本机身份缓存
