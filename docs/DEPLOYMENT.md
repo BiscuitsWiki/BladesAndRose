@@ -1,17 +1,20 @@
 # 服务器部署文件树
 
-> 更新于 2026-10-09。与《变种井字棋》共用一台腾讯云轻量服务器（Shanghai / Ubuntu 24.04 / 2C4G），
+> 更新于 2026-10-12。与《变种井字棋》共用一台腾讯云轻量服务器（Shanghai / Ubuntu 24.04 / 2C4G），
 > 本项目以独立 compose 项目 `bar` 运行，与 `att` 项目互不影响（各自目录、容器、网络与数据卷）。
 
 | 项 | 值 |
 |---|---|
-| 服务器 | `ubuntu@<服务器 IP>`（SSH 密钥：本机 `~/.ssh/<部署密钥>`） |
-| 部署源 | `/opt/bar` |
-| 镜像 / 容器 | `blades-and-rose:latest` / `bar-server`（healthy，`restart=unless-stopped`） |
+| 服务器 | `ubuntu@<服务器 IP>`（SSH 密钥：本机 `~/.ssh/<部署密钥>`；真实值只保存在本机，见文末「敏感信息」） |
+| 部署源 | `/opt/bar`（**普通文件目录，不是 git 仓库**：用 GitHub 仓库留档，部署靠上传源码） |
+| 镜像 / 容器 | `blades-and-rose:latest` / `bar-server`（healthy，`restart=unless-stopped`）；上一版保留为 `blades-and-rose:prev` |
 | 端口 | 宿主 `8082` → 容器 `8000`（过渡期非标端口；备案后改为 `127.0.0.1:8001` 交由 Caddy 反代 HTTPS） |
 | 数据卷 | `bar_data` → 容器 `/app/data`（账号表 `accounts.json`） |
 | 备份 | `/opt/backup/bar/accounts-<时间戳>.json`，由 root cron 每天 03:30 执行 `backup-accounts.sh`，保留最近 14 份 |
-| 部署方式 | `sudo docker compose -p bar up -d --build` |
+| 部署方式 | 上传源码 → `sudo docker compose -p bar up -d --build` |
+| 更新步骤 | ① `tar -czf` 打包 `src/ package.json package-lock.json tsconfig.json vite.config.ts index.html`（`docs/` 与 `*.md` 被 `.dockerignore` 排除，不进镜像）→ ② `scp` 上传 → ③ 服务器 `sudo tar -xzf` 解包到 `/opt/bar` → ④ 先 `sudo docker tag blades-and-rose:latest blades-and-rose:prev` 留回滚点 → ⑤ `sudo docker compose -p bar up -d --build` |
+| 回滚 | `sudo docker tag blades-and-rose:prev blades-and-rose:latest && sudo docker compose -p bar up -d`（源码可另从 GitHub `main` 取） |
+| 当前版本 | GitHub `main` 提交 `305a35f`（2025 扩充包技能组：房间持有技能组 + 技能插件化；`/room-skills` 原地改技能组、不清局不踢人） |
 | 限流 | 进程内按 IP 固定窗口（游客发号 20/分、注册 10/分、建房 20/分、座位认领 60/分、房间操作 60/分、房间信息 300/分），超限 429 |
 | SSH 登录 | 允许密码登录（2026-10-10 已回滚"仅密钥"加固：`00-hardening.conf` 已删除，配置回到原状）；`/etc/ssh/` 下的 `*.bak-hardening-20261009` 为当时备份，可随时清理 |
 | SSH 防爆破 | fail2ban（2026-10-10 安装，已设为开机自启）：sshd jail，10 分钟内失败 5 次封禁 6 小时，重复封禁时长翻倍（上限 1 周）；后端用 polling 读 `/var/log/auth.log`（Ubuntu 24.04 SSH 为 socket 激活，systemd 后端匹配不到日志）；配置在 `/etc/fail2ban/jail.d/bar-ssh.local`；查看 `sudo fail2ban-client status sshd`，解封 `sudo fail2ban-client set sshd unbanip <IP>` |
@@ -29,13 +32,13 @@
 │  ├─ index.html   package.json   package-lock.json   tsconfig.json   vite.config.ts
 │  └─ src/
 │     ├─ client/
-│     │  ├─ App.tsx   Board.tsx   AccountBar.tsx   main.tsx
-│     │  ├─ account.ts   room.ts   game.ts   avatar.ts   boardActions.ts   styles.css
-│     │  └─ __tests__/  account.test.ts  adapter.test.ts  board-actions.test.ts  client-smoke.test.ts
+│     │  ├─ App.tsx   Board.tsx   AccountBar.tsx   main.tsx   cards.tsx   RevealStage.tsx
+│     │  ├─ account.ts   room.ts   game.ts   avatar.ts   boardActions.ts   revealAnim.ts   styles.css
+│     │  └─ __tests__/  account.test.ts  adapter.test.ts  board-actions.test.ts  client-smoke.test.ts  reveal-anim.test.ts  hotseat-skill-flow.test.ts
 │     ├─ engine/
 │     │  ├─ game.ts  magic.ts  round.ts  setup.ts  view.ts
 │     │  ├─ autoPlay.ts  config.ts  rng.ts  types.ts  index.ts
-│     │  └─ __tests__/  auto-play.test.ts  engine.test.ts
+│     │  └─ __tests__/  auto-play.test.ts  engine.test.ts  loadout.test.ts  expanded-skills.test.ts
 │     └─ server/
 │        ├─ dev-server.ts                     ← 生产入口（PORT 环境变量 + 托管 dist + 房间/账号/座位 API + 按 IP 限流）
 │        ├─ accounts.ts   seats.ts   rateLimit.ts
@@ -58,3 +61,12 @@
    ├─ src/  index.html  package.json  package-lock.json  tsconfig.json  vite.config.ts
    └─ data/  → 挂载卷 bar_data（accounts.json）
 ```
+
+## 敏感信息（不入库）
+
+本文档属于**公开仓库**，服务器地址、SSH 密钥名、口令等一律用占位符 `<服务器 IP>` / `<部署密钥>`，真实值不写进仓库。
+
+- 真实值只保存在本机：`~/.ssh/<部署密钥>`（私钥文件本身）与本机笔记 / Trae 记忆（`.trae/`、项目记忆目录，均已被 `.gitignore` 排除）；
+- 部署命令里的 `ubuntu@<服务器 IP>` 用本机记录的真实值替换后再执行；
+- 若需要与他人协作部署，改用环境变量或本地 `.env`（`.env` 同样被 `.gitignore` 排除）传递，不要回填进本文档；
+- 提醒：SSH 目前**允许密码登录**，公网 IP 一旦泄露会成为扫描/爆破靶子——这也是本节坚持占位符的原因；加固（仅密钥登录）与 HTTPS 切换仍待办。
