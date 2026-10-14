@@ -216,6 +216,13 @@ h3 {
   gap: 6px;
 }
 
+/* 版图区（献祭 / 白蔷薇 / 血刃 / 死亡）里的卡牌：**不叠放、让它换行**。
+   这些区域是玩家必须看清的公开信息，卡名条在卡片底部居中，一旦横向叠放就会被盖住。
+   5 人局的阈值最多 4 张，44px 宽 + 6px 间距约 194px，单行放得下。 */
+.zone .chips {
+  align-items: flex-start;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -874,41 +881,112 @@ em.rose-count {
   margin-top: 4px;
 }
 
+/* ══ 卡面：画心（cover）+ 程序画的卡框（金线 + 四角饰花）+ 独立卡名条 ══
+   卡框与卡名由程序渲染，故多张卡绝对一致、改文案零成本，也不会被卡槽裁掉（详见 docs/UI-OVERHAUL-PLAN.md §5.4）。 */
+.cardface {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  flex: none;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #0d0a09;
+  box-shadow: inset 0 0 0 1px rgba(216, 178, 106, 0.35);
+}
+
+.cardface-panel {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 2px 2px 1px;
+  border: 1px solid rgba(216, 178, 106, 0.7);
+  border-radius: 2px;
+  overflow: hidden;
+  background: #0d0a09;
+}
+
+.cardface-art {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+.cardface-corner {
+  position: absolute;
+  color: var(--gold);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.cardface-corner.tl { top: 1px; left: 1px; }
+.cardface-corner.tr { top: 1px; right: 1px; transform: scaleX(-1); }
+.cardface-corner.bl { bottom: 1px; left: 1px; transform: scaleY(-1); }
+.cardface-corner.br { bottom: 1px; right: 1px; transform: scale(-1, -1); }
+
+.cardface-name {
+  flex: none;
+  text-align: center;
+  color: var(--gold);
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 尺寸变体：四种都保持 2:3（实体扑克牌比例） */
+.cardface.mini { width: 44px; height: 66px; }
+.cardface.mini .cardface-corner { width: 9px; }
+.cardface.mini .cardface-name { font-size: 8px; }
+
+.cardface.hand { width: 78px; height: 117px; }
+.cardface.hand .cardface-corner { width: 13px; }
+.cardface.hand .cardface-name { font-size: 10px; padding: 1px 0 3px; }
+
+.cardface.reveal { width: 96px; height: 144px; }
+.cardface.reveal .cardface-corner { width: 16px; }
+.cardface.reveal .cardface-name { font-size: 11px; padding: 2px 0 4px; }
+
+/* 结算动画：占满外层容器（外层已按 2:3 定尺寸） */
+.cardface.fill { width: 100%; height: 100%; }
+.cardface.fill .cardface-corner { width: 14px; }
+.cardface.fill .cardface-name { font-size: 10px; padding: 1px 0 3px; }
+
 .hand {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
+/* 手牌按钮只是一层裸包装：视觉全部由内部的卡面承担 */
 .card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  width: 78px;
-  height: 100px;
-  justify-content: center;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 13px;
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 4px;
   font-family: inherit;
   cursor: pointer;
+  transition: transform 0.12s ease-out;
 }
 
-.card:hover:not(:disabled) {
-  border-color: var(--gold);
+.card:hover:not(:disabled) .cardface {
+  box-shadow: inset 0 0 0 1px rgba(216, 178, 106, 0.35), 0 0 0 1px var(--gold);
 }
 
 .card.selected {
-  border-color: var(--gold);
-  background: #382c22;
   transform: translateY(-4px);
 }
 
+.card.selected .cardface {
+  box-shadow:
+    inset 0 0 0 1px rgba(216, 178, 106, 0.35),
+    0 0 0 1px var(--gold),
+    0 6px 14px rgba(0, 0, 0, 0.5);
+}
+
 .card:disabled {
-  opacity: 0.7;
+  opacity: 0.55;
   cursor: default;
 }
 
@@ -1117,9 +1195,30 @@ em.rose {
     gap: 6px;
   }
 
-  .card {
+  /* 手牌卡面：手机 68×102（仍是 2:3） */
+  .cardface.hand {
     width: 68px;
-    height: 86px;
+    height: 102px;
+  }
+
+  .cardface.hand .cardface-name {
+    font-size: 9px;
+  }
+
+  /* 「上一轮公开」卡面：与结算动画的手机尺寸（≤72×108）对齐，飞入时才不会大幅缩放 */
+  .cardface.reveal {
+    width: 72px;
+    height: 108px;
+  }
+
+  .cardface.reveal .cardface-name {
+    font-size: 9px;
+  }
+
+  /* 版图小卡再收一档（同样不叠放，人多局自动换行） */
+  .cardface.mini {
+    width: 38px;
+    height: 57px;
   }
 
   .dist td {
@@ -1264,14 +1363,12 @@ em.rose {
   background: repeating-linear-gradient(45deg, #241d1c 0 6px, #2c2422 6px 12px);
 }
 
+/* 正面牌面由卡面组件自带金线卡框与画心，故去掉外层装饰边框与底色，避免双重描边 */
 .reveal-anim-front {
   transform: rotateY(180deg);
-  background: var(--surface-2);
-}
-
-.reveal-anim-front .chip {
-  font-size: 15px;
-  padding: 5px 10px;
+  border: none;
+  border-radius: 1px;
+  background: none;
 }
 
 /* 飞行终点：「上一轮公开」面板聚焦，2 秒升到峰值（正好动画结束时最亮） */

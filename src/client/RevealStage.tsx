@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Card } from '../engine';
-import { CardChip } from './cards';
+import { CardFace } from './cards';
 import { REVEAL_FLIP_MS, REVEAL_TOTAL_MS } from './revealAnim';
 
 interface FlyTarget {
@@ -104,7 +104,7 @@ export function RevealStage({
               <div className="reveal-anim-inner">
                 <span className="reveal-anim-face reveal-anim-back" />
                 <span className="reveal-anim-face reveal-anim-front">
-                  <CardChip card={card} />
+                  <CardFace card={card} size="fill" />
                 </span>
               </div>
             </div>

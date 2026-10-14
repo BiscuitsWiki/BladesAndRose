@@ -1,4 +1,4 @@
-import { ROLE_LABEL, hasBudIcon, isBladeCard, isWhiteRoseCard, type Card } from '../engine';
+import { ROLE_LABEL, type Card } from '../engine';
 
 /** 卡牌的显示名（幽魂 / 信者 / 角色名） */
 export function cardLabel(card: Card): string {
@@ -8,49 +8,64 @@ export function cardLabel(card: Card): string {
 }
 
 /**
- * 卡牌标记：
- *  - 司教 / 信者带花苞，用黄色小花 ❀
- *  - 白蔷薇不带花苞，用白色蔷薇 ✿ 单独标识（不与花苞混淆）
- *  - 血刃阵营牌用剑标记
+ * 卡面对应的画心文件：`assets/cards/card-<kind>.webp`。
+ * 幽魂与信者有各自的画心；角色牌直接用角色名（信者角色与固定信者共用同一张）。
+ * 原始高分辨率 JPG 留档在 `assets-source/cards/`（不参与构建）。
  */
-export function CardMark({ card }: { card: Card }) {
-  if (isWhiteRoseCard(card)) {
-    return (
-      <em className="rose" title="白蔷薇">
-        ✿
-      </em>
-    );
-  }
-  if (hasBudIcon(card)) {
-    return (
-      <em className="bud" title="花苞">
-        ❀
-      </em>
-    );
-  }
-  if (isBladeCard(card)) {
-    return (
-      <em className="blade" title="血刃">
-        ⚔
-      </em>
-    );
-  }
-  return null;
+export function cardArtKind(card: Card): string {
+  return card.kind === 'role' ? card.role : card.kind;
 }
 
-/** 卡牌正面（牌名 + 标记），牌桌与公开结算动画共用 */
-export function CardChip({ card }: { card: Card }) {
-  const tone = isBladeCard(card)
-    ? 'blade'
-    : isWhiteRoseCard(card)
-      ? 'rose'
-      : hasBudIcon(card)
-        ? 'bud'
-        : '';
+/**
+ * 四角装饰卷叶：只含弧线与圆点、**不含直线**——
+ * 直线一律由 CSS 金线负责，因此两者不可能错位（早期版本用带直线的角饰踩过这个坑）。
+ */
+function CornerOrnament() {
   return (
-    <span className={`chip${tone ? ` chip-${tone}` : ''}`}>
-      {cardLabel(card)}
-      <CardMark card={card} />
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3 11.4 A8.4 8.4 0 0 1 11.4 3" stroke="currentColor" strokeWidth="1.1" opacity=".8" />
+      <path
+        d="M11.4 3 c-1.5 4.3 -4.1 6.9 -8.4 8.4 1.5 -4.3 4.1 -6.9 8.4 -8.4 Z"
+        fill="currentColor"
+        opacity=".9"
+      />
+      <circle cx="4.6" cy="4.6" r="1.05" fill="currentColor" />
+    </svg>
+  );
+}
+
+const CORNERS = ['tl', 'tr', 'bl', 'br'] as const;
+
+/**
+ * 卡面 = 上半「画心面板」（画心 + 金线 + 四角饰花）+ 下半独立「卡名条」。
+ *
+ * - 画心用 `background-size: cover` 填满面板，主体居中；
+ * - 卡框与卡名由程序渲染，故多张卡绝对一致、改文案零成本、且不会被卡槽裁掉；
+ * - 尺寸变体（mini / hand / reveal / fill）见 styles.css，均保持 2:3。
+ */
+export function CardFace({
+  card,
+  size = 'hand',
+  title,
+}: {
+  card: Card;
+  size?: 'mini' | 'hand' | 'reveal' | 'fill';
+  title?: string;
+}) {
+  return (
+    <span className={`cardface ${size}`} title={title}>
+      <span className="cardface-panel">
+        <span
+          className="cardface-art"
+          style={{ backgroundImage: `url(assets/cards/card-${cardArtKind(card)}.webp)` }}
+        />
+        {CORNERS.map((position) => (
+          <span key={position} className={`cardface-corner ${position}`}>
+            <CornerOrnament />
+          </span>
+        ))}
+      </span>
+      <span className="cardface-name">{cardLabel(card)}</span>
     </span>
   );
 }

@@ -12,6 +12,8 @@ RUN npm ci --registry=https://registry.npmmirror.com
 # 源码层：tsc 类型检查 + vite 构建前端
 COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
+# 静态资源（卡面美术等）；缺了这一行线上会没有图
+COPY public ./public
 RUN npm run build
 
 ENV NODE_ENV=production

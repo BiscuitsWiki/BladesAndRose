@@ -11,7 +11,7 @@ import {
 } from '../engine';
 import { canRandomPlay, canResolveRedraw, handActions } from './boardActions';
 import { avatarColor } from './avatar';
-import { CardChip, CardMark, cardLabel } from './cards';
+import { CardFace, cardLabel } from './cards';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from './revealAnim';
 
@@ -461,7 +461,7 @@ export function Board({
                 {G.zones.whiteRose.length === 0 ? (
                   <span className="dim">空</span>
                 ) : (
-                  G.zones.whiteRose.map((c) => <CardChip key={c.id} card={c} />)
+                  G.zones.whiteRose.map((c) => <CardFace key={c.id} card={c} size="mini" />)
                 )}
               </div>
             </div>
@@ -473,7 +473,7 @@ export function Board({
                 {G.zones.sacrifice.length === 0 ? (
                   <span className="dim">空</span>
                 ) : (
-                  G.zones.sacrifice.map((c) => <CardChip key={c.id} card={c} />)
+                  G.zones.sacrifice.map((c) => <CardFace key={c.id} card={c} size="mini" />)
                 )}
               </div>
             </div>
@@ -496,7 +496,7 @@ export function Board({
                 {G.zones.blade.length === 0 ? (
                   <span className="dim">空</span>
                 ) : (
-                  G.zones.blade.map((c) => <CardChip key={c.id} card={c} />)
+                  G.zones.blade.map((c) => <CardFace key={c.id} card={c} size="mini" />)
                 )}
               </div>
             </div>
@@ -508,7 +508,7 @@ export function Board({
                 {G.zones.death.length === 0 ? (
                   <span className="dim">空</span>
                 ) : (
-                  G.zones.death.map((c) => <CardChip key={c.id} card={c} />)
+                  G.zones.death.map((c) => <CardFace key={c.id} card={c} size="mini" />)
                 )}
               </div>
             </div>
@@ -609,7 +609,7 @@ export function Board({
               const owner = revealOwners.get(c.id);
               return (
                 <span key={c.id} className="reveal-item">
-                  <CardChip card={c} />
+                  <CardFace card={c} size="reveal" />
                   {owner && <em className="reveal-owner">{nameOf(owner)}</em>}
                 </span>
               );
@@ -669,8 +669,7 @@ export function Board({
                     })
                   }
                 >
-                  <span>{cardLabel(c)}</span>
-                  <CardMark card={c} />
+                  <CardFace card={c} title={ghostLocked ? '本轮不能打出幽魂牌' : undefined} />
                 </button>
               );
             })}

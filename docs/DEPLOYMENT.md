@@ -12,7 +12,7 @@
 | 数据卷 | `bar_data` → 容器 `/app/data`（账号表 `accounts.json`） |
 | 备份 | `/opt/backup/bar/accounts-<时间戳>.json`，由 root cron 每天 03:30 执行 `backup-accounts.sh`，保留最近 14 份 |
 | 部署方式 | 上传源码 → `sudo docker compose -p bar up -d --build` |
-| 更新步骤 | ① `tar -czf` 打包 `src/ package.json package-lock.json tsconfig.json vite.config.ts index.html`（`docs/` 与 `*.md` 被 `.dockerignore` 排除，不进镜像）→ ② `scp` 上传 → ③ 服务器 `sudo tar -xzf` 解包到 `/opt/bar` → ④ 先 `sudo docker tag blades-and-rose:latest blades-and-rose:prev` 留回滚点 → ⑤ `sudo docker compose -p bar up -d --build` |
+| 更新步骤 | ① `tar -czf` 打包 `src/ public/ package.json package-lock.json tsconfig.json vite.config.ts index.html`（`docs/` 与 `*.md` 被 `.dockerignore` 排除，不进镜像）→ ② `scp` 上传 → ③ 服务器 `sudo tar -xzf` 解包到 `/opt/bar` → ④ 先 `sudo docker tag blades-and-rose:latest blades-and-rose:prev` 留回滚点 → ⑤ `sudo docker compose -p bar up -d --build` |
 | 回滚 | `sudo docker tag blades-and-rose:prev blades-and-rose:latest && sudo docker compose -p bar up -d`（源码可另从 GitHub `main` 取） |
 | 当前版本 | GitHub `main` 提交 `8ef95c4`（UI：UID 只显示身份与编号；技能组展示具体技能明细 `loadoutEntries`） |
 | 限流 | 进程内按 IP 固定窗口（游客发号 20/分、注册 10/分、建房 20/分、座位认领 60/分、房间操作 60/分、房间信息 300/分），超限 429 |
