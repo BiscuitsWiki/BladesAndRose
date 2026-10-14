@@ -1,5 +1,5 @@
 import type { BoardProps } from 'boardgame.io/react';
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   ROLE_LABEL,
   SKILLS,
@@ -10,6 +10,7 @@ import {
   type PlayerViewEntry,
 } from '../engine';
 import { canRandomPlay, canResolveRedraw, handActions } from './boardActions';
+import { COIN_FLIGHT_MS, CRYSTAL_PULSE_MS, TURN_PULSE_MS, planAnims, type AnimSnapshot } from './anims';
 import { avatarColor } from './avatar';
 import { CardFace, cardLabel } from './cards';
 import { RevealStage } from './RevealStage';
@@ -36,6 +37,51 @@ function ClosedEyeMark() {
       <path d="M2.1 6.2Q8 12.6 13.9 6.2" />
       <path d="M5.05 8.6L4.15 10.4M8 9.4V11.4M10.95 8.6L11.85 10.4" />
     </svg>
+  );
+}
+
+/**
+ * 传币动画：硬币从上一位持币者的玩家行飞向新持币者的玩家行。
+ *
+ * 沿用公开结算动画已验证过的模式——用 `getBoundingClientRect` 测量起点 / 终点，
+ * 再由行内 `transform` 飞行；纯展示层，不读写对局状态。
+ */
+function CoinFlight({ from, to }: { from: string; to: string }) {
+  const [path, setPath] = useState<{ x: number; y: number; dx: number; dy: number } | null>(null);
+  const [flying, setFlying] = useState(false);
+
+  useLayoutEffect(() => {
+    const source = document.querySelector(`[data-prow="${from}"]`);
+    const target = document.querySelector(`[data-prow="${to}"]`);
+    if (!source || !target) return;
+    const a = source.getBoundingClientRect();
+    const b = target.getBoundingClientRect();
+    const x = a.left + a.width / 2;
+    const y = a.top + a.height / 2;
+    setPath({
+      x,
+      y,
+      dx: b.left + b.width / 2 - x,
+      dy: b.top + b.height / 2 - y,
+    });
+    // 下一帧再加位移，保证过渡从起点起跑（同 RevealStage 的翻牌起跑处理）
+    const raf = requestAnimationFrame(() => setFlying(true));
+    return () => cancelAnimationFrame(raf);
+  }, [from, to]);
+
+  if (!path) return null;
+  return (
+    <span className="coin-flight" style={{ left: path.x, top: path.y }} aria-hidden="true">
+      <span
+        className={`coin-flight-body${flying ? ' flying' : ''}`}
+        style={flying ? { transform: `translate(${path.dx}px, ${path.dy}px)` } : undefined}
+      >
+        <svg viewBox="0 0 15 15">
+          <polygon points="7.5 1 1.87 10.75 13.13 10.75" />
+          <polygon points="7.5 14 1.87 4.25 13.13 4.25" />
+        </svg>
+      </span>
+    </span>
   );
 }
 
@@ -83,11 +129,56 @@ export function Board({
   /** 已消费的结算轮次：挂载时已有的结算视为已消费（刷新 / 中途加入不重播），重开一局复位 */
   const seenRevealRef = useRef<number | null>(G.lastReveal?.round ?? null);
 
+  /** 传币动画：硬币从 from 飞向 to（座位号），null = 不播 */
+  const [coinFlight, setCoinFlight] = useState<{ from: string; to: string } | null>(null);
+  /** 水晶发动：刚发动水晶的座位，null = 不播 */
+  const [crystalLaunch, setCrystalLaunch] = useState<string | null>(null);
+  /** 回合提醒：该脉冲的座位，null = 不播 */
+  const [turnPulse, setTurnPulse] = useState<string | null>(null);
+  /** 上一帧快照（动效判定的基准）；挂载时为 null → 首帧不播任何动画 */
+  const prevSnapRef = useRef<AnimSnapshot | null>(null);
+
   // 行动窗口切换时清空临时选择
   useEffect(() => {
     setPickedTargets([]);
     setPickedCardId(null);
   }, [G.round, G.phase, G.currentActor]);
+
+  // 动效编排：比较「上一帧 → 当前帧」，决定播哪些动效（判断全在纯函数 planAnims 里，配套单测）
+  useEffect(() => {
+    const next: AnimSnapshot = {
+      coinHolder: G.coinHolder,
+      crystalsPlaced: G.crystalsPlaced,
+      lastCrystalBy: G.crystalTrack.at(-1)?.player ?? null,
+      currentActor: G.currentActor ?? null,
+    };
+    const prev = prevSnapRef.current;
+    prevSnapRef.current = next;
+    const plan = planAnims(prev, next, prefersReducedMotion());
+    if (plan.coin) setCoinFlight(plan.coin);
+    if (plan.crystal) setCrystalLaunch(plan.crystal);
+    if (plan.turn) setTurnPulse(plan.turn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [G.coinHolder, G.crystalsPlaced, G.currentActor]);
+
+  // 每项动效到时自行退场（各自独立计时，互不干扰）
+  useEffect(() => {
+    if (!coinFlight) return;
+    const timer = window.setTimeout(() => setCoinFlight(null), COIN_FLIGHT_MS);
+    return () => clearTimeout(timer);
+  }, [coinFlight]);
+
+  useEffect(() => {
+    if (crystalLaunch === null) return;
+    const timer = window.setTimeout(() => setCrystalLaunch(null), CRYSTAL_PULSE_MS);
+    return () => clearTimeout(timer);
+  }, [crystalLaunch]);
+
+  useEffect(() => {
+    if (turnPulse === null) return;
+    const timer = window.setTimeout(() => setTurnPulse(null), TURN_PULSE_MS);
+    return () => clearTimeout(timer);
+  }, [turnPulse]);
 
   // 观察到「新」的公开结算时放映一幕动画（同一轮只播一次；时序见 RevealStage）
   useEffect(() => {
@@ -238,7 +329,7 @@ export function Board({
           // 标注槽位放在行按钮之外：行按钮常处于禁用态（禁用的按钮不会派发点击），
           // 而非睁眼玩家的标注在任何阶段都应该能点。
           return (
-            <div key={p.id} className="player-line">
+            <div key={p.id} className="player-line" data-prow={p.id}>
               {spectating ? (
                 // 观战席看不到睁眼 / 闭眼信息：保留空槽位对齐
                 <span className="eye-slot" aria-hidden="true" />
@@ -259,7 +350,9 @@ export function Board({
               <button
                 className={`player-row${p.id === playerID ? ' me' : ''}${
                   pickedTargets.includes(p.id) ? ' picked' : ''
-                }${watchSeat === p.id ? ' focused' : ''}${isOffline(p.id) ? ' offline' : ''}`}
+                }${watchSeat === p.id ? ' focused' : ''}${isOffline(p.id) ? ' offline' : ''}${
+                  turnPulse === p.id ? ' turn-pulse' : ''
+                }`}
                 disabled={!selectable}
                 onClick={() => {
                   if (G.phase === 'magic') moves.passCoin(p.id);
@@ -541,6 +634,8 @@ export function Board({
         <div className="crystal-track">
           {Array.from({ length: G.players.length }, (_, i) => {
             const entry = G.crystalTrack[i];
+            // 刚发动的那一枚（末条）做一次高亮脉冲，解释「本轮的技能从哪来」
+            const launching = crystalLaunch !== null && i === G.crystalTrack.length - 1;
             if (!entry) {
               return (
                 <span key={i} className="track-hex" title={`第 ${i + 1} 轮（尚未发动）`}>
@@ -551,7 +646,7 @@ export function Board({
             return (
               <span
                 key={i}
-                className="track-hex filled"
+                className={`track-hex filled${launching ? ' launching' : ''}`}
                 title={`第 ${i + 1} 轮 · ${nameOf(entry.player)} 发动水晶 ${entry.value}`}
               >
                 <span className="track-hex-body">{entry.value}</span>
@@ -560,7 +655,7 @@ export function Board({
           })}
         </div>
         {roundSkill && roundCrystal && (
-          <p className="round-note">
+          <p className={`round-note${crystalLaunch !== null ? ' launching' : ''}`}>
             <strong>
               本轮水晶 {roundCrystal.value} ·【{roundSkill.name}】
             </strong>
@@ -725,6 +820,8 @@ export function Board({
           ))}
         </ol>
       </div>
+
+      {coinFlight && <CoinFlight from={coinFlight.from} to={coinFlight.to} />}
 
       {revealFilm && (
         <RevealStage
