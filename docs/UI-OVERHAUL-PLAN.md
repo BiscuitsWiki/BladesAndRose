@@ -1,6 +1,6 @@
 # 《血与刃的白蔷薇》表现层改造方案
 
-> 状态：**进行中**（§2 已拍板 10 项决策；§9 步骤 1 部分完成——7 张卡面画心已产出并逐像素验证、步骤 5「卡面接入」已完成、步骤 6 四项动效触发已确证）｜最后更新：2026-10-15｜关联文档：[DESIGN.md](./DESIGN.md) · [RULES.md](./RULES.md) · [SKILL-LOADOUT-PLAN.md](./SKILL-LOADOUT-PLAN.md) · [DEPLOYMENT.md](./DEPLOYMENT.md) · [PROGRESS.md](./PROGRESS.md)
+> 状态：**进行中**（§2 已拍板 10 项决策；§9 步骤 1 部分完成——7 张卡面画心已产出并逐像素验证、步骤 2「场景纯函数」与步骤 3「表现层拆分」已完成、步骤 4「牌桌场景化」已完成 A1–A4（剩 A5 手牌扇形）、步骤 5「卡面接入」已完成、步骤 6 四项动效触发已确证）｜最后更新：2026-10-16｜关联文档：[DESIGN.md](./DESIGN.md) · [RULES.md](./RULES.md) · [SKILL-LOADOUT-PLAN.md](./SKILL-LOADOUT-PLAN.md) · [DEPLOYMENT.md](./DEPLOYMENT.md) · [PROGRESS.md](./PROGRESS.md)
 
 本文说明「把现有的功能验证型界面改造为 2D 精美插画风」的实现方案，并预留微信小程序作为第二个表现层。
 
@@ -32,13 +32,17 @@
 
 | 文件 | 行数 | 现状职责 |
 |---|---|---|
-| [App.tsx](../src/client/App.tsx) | 1369 | 外壳 + URL hash 路由 + 大厅（人数 / 配比 / 技能组 / 昵称）+ 顶栏 + 房间面板 + 座位网格 + 观战席 |
-| [Board.tsx](../src/client/Board.tsx) | 712 | 牌桌：版图三栏、玩家列表（眼睛列 / 头像 / 手牌数 / 水晶 / 状态标签 / 硬币）、手牌区、游戏进程、私密情报、日志 |
-| [RevealStage.tsx](../src/client/RevealStage.tsx) | 108 | 公开结算的 5 秒全屏动画（3 秒翻牌 + 2 秒飞入结算区） |
-| [cards.tsx](../src/client/cards.tsx) | 65 | 卡面渲染：`CardFace`（画心 + 程序画卡框 + 独立卡名条；尺寸变体 mini / hand / reveal / fill）+ `cardArtKind` 映射 |
-| [styles.css](../src/client/styles.css) | 1180 | 原生 CSS，暗色主题 9 个变量（`--bg/--surface/--blood/--rose/--gold/--blade`…）+ 手机适配媒体查询 + 卡面样式 |
-| [revealAnim.ts](../src/client/revealAnim.ts) | 27 | 结算动画的纯逻辑：`decideRevealAnim`（是否播 / 去重 / 无障碍）+ 时长常量 |
-| [anims.ts](../src/client/anims.ts) | 78 | 动效编排纯逻辑：`planAnims`（快照对比 → 传币 / 水晶 / 回合提醒）+ 时长常量 |
+| [App.tsx](../src/client/App.tsx) | 829 | 外壳 + URL hash 路由 + 顶栏；大厅与房间面板已拆分到 `lobby/` `room/`（见步骤 3） |
+| [board/Board.tsx](../src/client/board/Board.tsx) | 811 | 牌桌：桌心版图三栏、席位环绕的席位卡列表、手牌区、游戏进程（含轮次轨道）、上一轮公开、私密情报、日志 |
+| [board/SeatCard.tsx](../src/client/board/SeatCard.tsx) | 112 | 环上的席位卡（或紧凑列表的一行）：座位号 / 头像 / 昵称 / 手牌数 / 水晶 / 持币硬币 / 状态标签 / 眼睛槽 |
+| [board/TableScene.tsx](../src/client/board/TableScene.tsx) | 49 | 桌面容器：席位环绕 + 桌心版图（`center`），窄屏 / 10 人局退化为紧凑列表 |
+| [scene.ts](../src/client/scene.ts) | 183 | **场景共享纯函数**：`seatLayout`（视角旋转 + 归一化坐标）/ `seatVisualOf`（席位卡显示内容）/ `cardFaceOf`（卡面语义）；零框架依赖，供 Web 与小程序两端复用 |
+| [board/RevealStage.tsx](../src/client/board/RevealStage.tsx) | 116 | 公开结算的 5 秒全屏动画（3 秒翻牌 + 2 秒飞入结算区） |
+| [cards.tsx](../src/client/cards.tsx) | 71 | 卡面渲染：`CardFace`（画心 + 程序画卡框 + 独立卡名条；尺寸变体 mini / hand / reveal / fill）+ `cardArtKind` 映射 |
+| [styles.css](../src/client/styles.css) | 1660 | 原生 CSS，暗色主题 9 个变量（`--bg/--surface/--blood/--rose/--gold/--blade`…）+ 桌布 / 席位环 / 卡面样式 + 手机适配媒体查询 |
+| [revealAnim.ts](../src/client/revealAnim.ts) | 29 | 结算动画的纯逻辑：`decideRevealAnim`（是否播 / 去重 / 无障碍）+ 时长常量 |
+| [anims.ts](../src/client/anims.ts) | 71 | 动效编排纯逻辑：`planAnims`（快照对比 → 传币 / 水晶 / 回合提醒）+ 时长常量 |
+| [boardActions.ts](../src/client/boardActions.ts) | 59 | 手牌区按钮的可用性判定（`handActions` / `canRandomPlay` / `canResolveRedraw`），配套单测 |
 | [avatar.ts](../src/client/avatar.ts) | 6 | 昵称派生头像底色 |
 
 **可复用的既有机制（改造时不要重造）**：
@@ -53,7 +57,7 @@
 - ~~无资源管线：目前项目里**没有任何图片资源**（`public/` 目录不存在），视觉全部由 CSS + emoji 拼出。~~ → **已建立**：`public/assets/cards/` 下已有 7 张卡面画心（见 §5.3）；资源进 `dist` 后需同步改 `Dockerfile` 与部署打包清单（§6.4）。
 - **运行时已接入**（§9 步骤 5）：手牌、版图四区、「上一轮公开」、结算翻牌动画全部改用 `CardFace`；`CardChip` / `CardMark`（文字 + emoji 旧方案）已删除；临时预览页 `public/cards-preview.html` 已在转 WebP 时删除，不再进 `public/`。
 - 构建与部署链对资源零支持 → **已修**：`Dockerfile` 增加 `COPY public ./public`，[DEPLOYMENT.md](./DEPLOYMENT.md) 更新步骤的打包清单已加入 `public/`（§6.4）。
-- `App.tsx` 已达 1369 行，改造前必须先拆文件。
+- ~~`App.tsx` 已达 1369 行，改造前必须先拆文件。~~ → **已拆**（§9 步骤 3）：1414 → **829 行**，`lobby/` `room/` `board/` 已分开，步骤 4 的牌桌视觉改造才得以安全落地。
 - 项目未引入 Tailwind（原生 CSS 手写），且小程序端的 WXSS 也不支持 Tailwind——**继续手写 CSS 是双端一致的选择**。
 
 ## 4. 总体架构
@@ -275,9 +279,9 @@ src/client/
 | 步 | 内容 | 验收 | 状态 |
 |---|---|---|---|
 | 1 | 资源规范落地：`public/assets/` 目录 + 首批资源 + Dockerfile / 部署清单同步 | 本地页面能加载新资源；`npm run build` 产物含 `dist/assets/` | **部分完成**：7 张卡面画心已产出（§5.3）；Dockerfile 已加 `COPY public ./public`、部署打包清单已加 `public/`；卡背 / 桌布 / 头像待做 |
-| 2 | `scene.ts` 场景纯函数 + 单测（`seatLayout` / `seatVisualOf` / `cardFaceOf`） | 新增用例全绿；全量绿 | **已完成**：三个纯函数 + 20 单测（5–10 人局穷举 / 视角旋转 / 纯函数不改入参）；`cards.tsx` 的 `cardLabel`/`cardArtKind` 改为委托 `cardFaceOf`。**注**：`seatLayout` / `seatVisualOf` 目前尚无消费者（消费点是步骤 4 的席位卡与场景），口径由单测锁死 |
+| 2 | `scene.ts` 场景纯函数 + 单测（`seatLayout` / `seatVisualOf` / `cardFaceOf`） | 新增用例全绿；全量绿 | **已完成**：三个纯函数 + 20 单测（5–10 人局穷举 / 视角旋转 / 纯函数不改入参）；`cards.tsx` 的 `cardLabel`/`cardArtKind` 改为委托 `cardFaceOf`。**注**：当时尚无消费者，现已由步骤 4 的 A1–A3 接入（`Board` 消费 `seatVisualOf`、席位环绕消费 `seatLayout`），口径由单测锁死 |
 | 3 | 表现层拆分：App.tsx 拆为 `lobby/` `room/` `board/` 三块（行为等价） | 全量绿；热座与联机行为无差异 | **已完成**：App.tsx 1414 → **829 行**（`lobby/Lobby.tsx`、`lobby/DistributionEditor.tsx`、`room/RoomPanel.tsx`、`CopyButton.tsx`、`LoadoutChips.tsx`、`distribution.ts`；`Board.tsx` / `RevealStage.tsx` 移入 `board/`）——250 用例全绿、`tsc` 无错误、生产构建产物 hash 不变；浏览器冒烟：大厅与热座牌桌渲染正常、控制台无报错（联机房间面板一项因浏览器工具异常未复验，留待补充） |
-| 4 | 牌桌场景化：桌面 + 席位环绕 + 中央版图（替换现有玩家列表与版图面板） | 桌面端观感达标；手机端无横向溢出 | 待做 |
+| 4 | 牌桌场景化：桌面 + 席位环绕 + 中央版图（替换现有玩家列表与版图面板） | 桌面端观感达标；手机端无横向溢出 | **部分完成**（A1–A4 已推送，剩 A5）：A1 `843f554` Board 改为消费 `seatVisualOf`；A2 `a8a035d` 席位环绕桌面 `TableScene` + `seatLayout` 行内定位；A3 `8b8636d` 席位卡抽成 `SeatCard`（锚点类名一字未改）；A4 `6523b9e` 版图收进桌心 `.table-center` + 牌桌置顶（游戏进程含轮次轨道贴桌下沿）、窄屏 `<720px` 默认紧凑列表、`.table-ring` 内边距 7%→10%、修 `.table-scene` 误引未定义的 `var(--panel)`。验收证据：250 用例全绿 + `tsc` 无错误 + 1099px 浏览器实测（桌心版图与席位无重叠、`data-prow` 完好、`overflowX = 0`，紧凑列表同样无溢出）。**A6 兜底视图已在 A2 提前完成**；剩 **A5：手牌区改扇形并移到桌下** |
 | 5 | 卡面接入：`CardFace`（画心 + 程序画卡框 + 卡名条）取代 `CardChip`（牌桌 / 手牌 / 结算 / 上一轮公开全链路），手牌槽改 2:3 | 卡面一致；68×102 下七图可辨；结算动画仍严格 5 秒；216 用例全绿 | **已完成**（tsc 无错误、216 用例全绿；浏览器实测：手牌 78×117 卡面正常、`assets/cards/*.jpg` 均 200、「上一轮公开」5 张 96×144 卡面正常。**翻牌动画在无头浏览器未观察到**，疑因该环境 `prefers-reduced-motion: reduce` 生效，或热座切视角重建 client 的既有「不重播」行为——待真机确认） |
 | 6 | 动效：传币 / 水晶 / 出牌落桌 / 发牌 + 结算动画升级 | 手机 60fps；`prefers-reduced-motion` 全部生效 | **部分完成**：传币、水晶发动、回合提醒、胜负已实现（判定抽成纯函数 `anims.ts`，11 个单测；新增 `anims.test.ts`，全量 **227** 用例全绿）；发牌、出牌落桌、飞入区域延后（理由见 §7） |
 | 7 | 大厅与房间面板精美化 | 观感达标；房主 / 非房主 / 观战三种身份均正常 | 待做 |
@@ -286,8 +290,8 @@ src/client/
 
 ## 10. 测试与验证
 
-- **硬门槛**：现有 **216 个用例全绿** + `tsc --noEmit` 无错误。引擎层零改动是前提——若某条用例必须改，说明方案跑偏了。
-- **新增单测**：`scene.ts`（布局坐标、视角旋转、映射穷举 5–10 人局）、动效编排（`nextAnimStep` 的顺序与去重，模式同现有 `reveal-anim.test.ts`）。
+- **硬门槛**：现有 **250 个用例全绿** + `tsc --noEmit` 无错误。引擎层零改动是前提——若某条用例必须改，说明方案跑偏了。
+- **新增单测**：`scene.ts`（布局坐标、视角旋转、映射穷举 5–10 人局，`scene.test.ts`）、动效编排（`planAnims` 的快照对比与去重，`anims.test.ts`，模式同 `reveal-anim.test.ts`）。
 - **视觉验证**：桌面（880px 容器）与手机（375px）截图核对；关键状态各一张（开局 / 目标选择 / 出牌 / 结算 / 胜负 / 断线 / AI 托管 / 观战）。
 - **联机冒烟**：沿用现有清单——双窗口不同座位进同一房、视角隔离、真实动作实时同步、刷新重连。
 - **性能预算**：首屏资源 ≤ 2MB；结算动画期间 JS 主线程不出现长任务。
