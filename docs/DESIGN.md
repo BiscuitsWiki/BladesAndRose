@@ -31,8 +31,8 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  表现层  src/client/App.tsx · Board.tsx · styles.css      │
-│  大厅（人数/配比/座位）、牌桌渲染、热座视角切换              │
+│  表现层  src/client/App.tsx（壳）· lobby/ · room/ · board/ · scene.ts · styles.css │
+│  大厅（人数/配比/座位）、房间面板、牌桌渲染、热座视角切换、场景纯函数       │
 └──────────────────────────┬──────────────────────────────┘
                            │ moves / GameView
 ┌──────────────────────────▼──────────────────────────────┐
@@ -238,11 +238,17 @@ BladesAndRose/
     │   ├── AccountBar.tsx        # 大厅身份条（UID / 注册 / 登录 / 退出）
     │   ├── avatar.ts             # 昵称派生头像底色
     │   ├── boardActions.ts       # 按钮可用性判断（纯函数，便于单测）
+    │   ├── scene.ts              # 场景纯函数（席位环布局 / 席位视觉映射 / 卡面语义；双端共享）
+    │   ├── distribution.ts       # 配比是否等同官方配比（纯函数）
     │   ├── cards.tsx             # 卡牌正面（牌桌与结算动画共用）
-    │   ├── RevealStage.tsx       # 公开结算的一幕（5 秒翻牌 + 飞行，纯展示层）
+    │   ├── CopyButton.tsx        # 房间名 / 房间号 / UID 的复制按钮（顶栏共用）
+    │   ├── LoadoutChips.tsx      # 技能组明细标签（大厅与房间面板共用）
     │   ├── revealAnim.ts         # 结算动画触发决策（纯函数，便于单测）
-    │   ├── App.tsx  Board.tsx  main.tsx  styles.css
-    │   └── __tests__/adapter.test.ts · client-smoke.test.ts · hotseat-skill-flow.test.ts · board-actions.test.ts · account.test.ts · reveal-anim.test.ts
+    │   ├── App.tsx  main.tsx  styles.css   # 外壳 + hash 路由 + 顶栏；入口；主题与场景样式
+    │   ├── lobby/                # 大厅：Lobby.tsx（人数 / 配比 / 技能组 / 昵称 / 房间入口）· DistributionEditor.tsx
+    │   ├── room/                 # 房间面板：RoomPanel.tsx（座位网格 / 观战席 / 房主操作 / 技能组编辑）
+    │   ├── board/                # 牌桌：Board.tsx（编排）· RevealStage.tsx（5 秒结算动画）
+    │   └── __tests__/adapter.test.ts · client-smoke.test.ts · hotseat-skill-flow.test.ts · board-actions.test.ts · account.test.ts · reveal-anim.test.ts · anims.test.ts · scene.test.ts
     └── server/
         ├── dev-server.ts         # 开发用房间服务器（联机多开测试）
         ├── accounts.ts           # UID 区间、账号表与落盘（纯逻辑 + 文件区）

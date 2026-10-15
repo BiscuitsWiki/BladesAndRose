@@ -275,8 +275,8 @@ src/client/
 | 步 | 内容 | 验收 | 状态 |
 |---|---|---|---|
 | 1 | 资源规范落地：`public/assets/` 目录 + 首批资源 + Dockerfile / 部署清单同步 | 本地页面能加载新资源；`npm run build` 产物含 `dist/assets/` | **部分完成**：7 张卡面画心已产出（§5.3）；Dockerfile 已加 `COPY public ./public`、部署打包清单已加 `public/`；卡背 / 桌布 / 头像待做 |
-| 2 | `scene.ts` 场景纯函数 + 单测（`seatLayout` / `seatVisualOf` / `cardFaceOf`） | 新增用例全绿；全量绿 | 待做 |
-| 3 | 表现层拆分：App.tsx 拆为 `lobby/` `room/` `board/` 三块（行为等价） | 全量绿；热座与联机行为无差异 | 待做 |
+| 2 | `scene.ts` 场景纯函数 + 单测（`seatLayout` / `seatVisualOf` / `cardFaceOf`） | 新增用例全绿；全量绿 | **已完成**：三个纯函数 + 20 单测（5–10 人局穷举 / 视角旋转 / 纯函数不改入参）；`cards.tsx` 的 `cardLabel`/`cardArtKind` 改为委托 `cardFaceOf`。**注**：`seatLayout` / `seatVisualOf` 目前尚无消费者（消费点是步骤 4 的席位卡与场景），口径由单测锁死 |
+| 3 | 表现层拆分：App.tsx 拆为 `lobby/` `room/` `board/` 三块（行为等价） | 全量绿；热座与联机行为无差异 | **已完成**：App.tsx 1414 → **829 行**（`lobby/Lobby.tsx`、`lobby/DistributionEditor.tsx`、`room/RoomPanel.tsx`、`CopyButton.tsx`、`LoadoutChips.tsx`、`distribution.ts`；`Board.tsx` / `RevealStage.tsx` 移入 `board/`）——250 用例全绿、`tsc` 无错误、生产构建产物 hash 不变；浏览器冒烟：大厅与热座牌桌渲染正常、控制台无报错（联机房间面板一项因浏览器工具异常未复验，留待补充） |
 | 4 | 牌桌场景化：桌面 + 席位环绕 + 中央版图（替换现有玩家列表与版图面板） | 桌面端观感达标；手机端无横向溢出 | 待做 |
 | 5 | 卡面接入：`CardFace`（画心 + 程序画卡框 + 卡名条）取代 `CardChip`（牌桌 / 手牌 / 结算 / 上一轮公开全链路），手牌槽改 2:3 | 卡面一致；68×102 下七图可辨；结算动画仍严格 5 秒；216 用例全绿 | **已完成**（tsc 无错误、216 用例全绿；浏览器实测：手牌 78×117 卡面正常、`assets/cards/*.jpg` 均 200、「上一轮公开」5 张 96×144 卡面正常。**翻牌动画在无头浏览器未观察到**，疑因该环境 `prefers-reduced-motion: reduce` 生效，或热座切视角重建 client 的既有「不重播」行为——待真机确认） |
 | 6 | 动效：传币 / 水晶 / 出牌落桌 / 发牌 + 结算动画升级 | 手机 60fps；`prefers-reduced-motion` 全部生效 | **部分完成**：传币、水晶发动、回合提醒、胜负已实现（判定抽成纯函数 `anims.ts`，11 个单测；新增 `anims.test.ts`，全量 **227** 用例全绿）；发牌、出牌落桌、飞入区域延后（理由见 §7） |
