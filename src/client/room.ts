@@ -298,7 +298,10 @@ export async function startRoom(opts: {
     playerID: opts.seat,
     credentials: opts.credentials,
   });
-  if (!response.ok) throw new Error(`开始游戏失败（HTTP ${response.status}）`);
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error ?? `开始游戏失败（HTTP ${response.status}）`);
+  }
 }
 
 /**

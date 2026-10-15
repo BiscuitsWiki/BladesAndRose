@@ -30,6 +30,18 @@ export function seatMetaOf<T>(players: Record<string, T | undefined>, seat: stri
   return isSeatKey(players, seat) ? players[seat] : undefined;
 }
 
+/**
+ * 还没被占用的座位（自有座位键里没写 `name` 的那些，返回座位号数组）。
+ *
+ * 用途：`/room-start` 的「坐满才能开局」门槛。空座位在引擎里**永远不会行动**——
+ * `playOrder` 覆盖全部座位（`orderFrom`），阶段一又只推进真人 / 托管，
+ * 而 AI 托管只认 presence 里 `ai === true` 的座位（= 曾入座后断线），救不了从未有人坐的空座。
+ * 幂等、无副作用，可直接单测。
+ */
+export function emptySeatsOf(players: Record<string, ClaimSeatMeta | undefined>): string[] {
+  return Object.keys(players).filter((seat) => !players[seat]?.name);
+}
+
 /** 座位号在消息里的写法：数字座位按 1 起显示，非法键原样展示（便于排查恶意请求） */
 function seatLabel(seat: string): string {
   return /^\d+$/.test(seat) ? `座位 ${Number(seat) + 1}` : `座位「${seat}」`;

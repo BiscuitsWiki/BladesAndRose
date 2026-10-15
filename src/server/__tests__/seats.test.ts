@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { decideSeatClaim, isSeatKey, pickLatestGame, seatMetaOf, type SeatClaimInput } from '../seats';
+import {
+  decideSeatClaim,
+  emptySeatsOf,
+  isSeatKey,
+  pickLatestGame,
+  seatMetaOf,
+  type SeatClaimInput,
+} from '../seats';
 
 const UID = '123456789';
 const OTHER_UID = '987654321';
@@ -14,6 +21,20 @@ function input(over: Partial<SeatClaimInput> = {}): SeatClaimInput {
     ...over,
   };
 }
+
+describe('空座位清点（emptySeatsOf）', () => {
+  it('全员就座：没有空座位', () => {
+    expect(emptySeatsOf({ 0: { name: 'Alice' }, 1: { name: 'Bob' } })).toEqual([]);
+  });
+
+  it('部分就座：按座位号顺序返回空座位', () => {
+    expect(emptySeatsOf({ 0: { name: 'Alice' }, 1: {}, 2: {} })).toEqual(['1', '2']);
+  });
+
+  it('只有凭据没有名字：仍算空座位（断线释放后名字被清掉）', () => {
+    expect(emptySeatsOf({ 0: { name: 'Alice' }, 1: { credentials: 'cred-b' } })).toEqual(['1']);
+  });
+});
 
 describe('座位认领决策（decideSeatClaim）', () => {
   it('已占用 + 绑定就是本 UID：归还现有凭据（不轮换）', () => {

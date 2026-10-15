@@ -52,7 +52,7 @@ import {
 import { getBladesAndRose } from '../client/game';
 import { AccountStore, uidKind } from './accounts';
 import { hitRateWindow, pruneExpired, type RateWindow } from './rateLimit';
-import { decideSeatClaim, pickLatestGame, seatMetaOf } from './seats';
+import { decideSeatClaim, emptySeatsOf, pickLatestGame, seatMetaOf } from './seats';
 
 /** 监听端口：容器 / 生产环境用环境变量 PORT 覆盖，开发默认 8000（与客户端 ROOM_SERVER_PORT 一致） */
 const PORT = Number(process.env.PORT ?? 8000);
@@ -784,6 +784,18 @@ function registerRoomApi(): void {
     }
     if (resolveHostSeat(matchID, players) !== playerID) {
       ctx.throw(403, 'Only the host can start the game');
+    }
+    // 坐满才能开局：空座位在引擎里永远不会行动（阶段一 / 本轮公开都走不完），
+    // 而 AI 托管只覆盖「曾入座后断线」的座位，救不了从未有人坐的空座
+    const emptySeats = emptySeatsOf(players);
+    if (emptySeats.length > 0) {
+      ctx.status = 409;
+      ctx.body = {
+        error: `还有 ${emptySeats.length} 个空座位（${emptySeats
+          .map((seat) => `座位 ${Number(seat) + 1}`)
+          .join('、')}），坐满后才能开始；人凑不齐可回大厅改人数后重开房间`,
+      };
+      return;
     }
     roomExtra(matchID).started = true;
     ctx.body = { started: true };

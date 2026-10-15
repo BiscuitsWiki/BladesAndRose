@@ -635,7 +635,7 @@ function RoomPanel({
       {isHost && (
         <div className="actions">
           {!started && (
-            <button className="btn primary" onClick={onStart}>
+            <button className="btn primary" disabled={taken < count} onClick={onStart}>
               开始游戏
             </button>
           )}
@@ -645,7 +645,7 @@ function RoomPanel({
           {!started && (
             <span className="dim">
               {taken < count
-                ? `还有 ${count - taken} 个空座位：未坐满也能开始，空座位本局不会行动`
+                ? `还有 ${count - taken} 个空座位：坐满后才能开始（人凑不齐可回大厅改人数后重开房间）`
                 : '全员已就座，点击开始'}
             </span>
           )}
