@@ -1,6 +1,6 @@
 # 服务器部署文件树
 
-> 更新于 2026-10-12。与《变种井字棋》共用一台腾讯云轻量服务器（Shanghai / Ubuntu 24.04 / 2C4G），
+> 更新于 2026-10-15。与《变种井字棋》共用一台腾讯云轻量服务器（Shanghai / Ubuntu 24.04 / 2C4G），
 > 本项目以独立 compose 项目 `bar` 运行，与 `att` 项目互不影响（各自目录、容器、网络与数据卷）。
 
 | 项 | 值 |
@@ -12,9 +12,9 @@
 | 数据卷 | `bar_data` → 容器 `/app/data`（账号表 `accounts.json`） |
 | 备份 | `/opt/backup/bar/accounts-<时间戳>.json`，由 root cron 每天 03:30 执行 `backup-accounts.sh`，保留最近 14 份 |
 | 部署方式 | 上传源码 → `sudo docker compose -p bar up -d --build` |
-| 更新步骤 | ① `tar -czf` 打包 `src/ public/ package.json package-lock.json tsconfig.json vite.config.ts index.html`（`docs/` 与 `*.md` 被 `.dockerignore` 排除，不进镜像）→ ② `scp` 上传 → ③ 服务器 `sudo tar -xzf` 解包到 `/opt/bar` → ④ 先 `sudo docker tag blades-and-rose:latest blades-and-rose:prev` 留回滚点 → ⑤ `sudo docker compose -p bar up -d --build` |
+| 更新步骤 | ① `tar -czf` 打包 `src/ public/ Dockerfile .dockerignore package.json package-lock.json tsconfig.json vite.config.ts index.html`（`docs/` 与 `*.md` 被 `.dockerignore` 排除，不进镜像）→ ② `scp` 上传 → ③ 服务器 `sudo tar -xzf` 解包到 `/opt/bar` → ④ 先 `sudo docker tag blades-and-rose:latest blades-and-rose:prev` 留回滚点 → ⑤ `sudo docker compose -p bar up -d --build`。**`Dockerfile` 必须在打包清单里**：`public/` 进镜像靠它的 `COPY public ./public`，漏传就会「前端新代码已上线、但卡面全部 404」（2026-10-15 实际踩到过：只打包 `public/` 而没带 `Dockerfile`，服务器上的旧 Dockerfile 里没有这行） |
 | 回滚 | `sudo docker tag blades-and-rose:prev blades-and-rose:latest && sudo docker compose -p bar up -d`（源码可另从 GitHub `main` 取） |
-| 当前版本 | GitHub `main` 提交 `8ef95c4`（UI：UID 只显示身份与编号；技能组展示具体技能明细 `loadoutEntries`） |
+| 当前版本 | GitHub `main` 提交 `0b28742`（2026-10-15 部署：卡面美术首次上线 + 传币 / 水晶 / 回合提醒 / 胜负四项动效；回滚点 `blades-and-rose:prev` = 上一次部署的 `8ef95c4` 那版） |
 | 限流 | 进程内按 IP 固定窗口（游客发号 20/分、注册 10/分、建房 20/分、座位认领 60/分、房间操作 60/分、房间信息 300/分），超限 429 |
 | SSH 登录 | 允许密码登录（2026-10-10 已回滚"仅密钥"加固：`00-hardening.conf` 已删除，配置回到原状）；`/etc/ssh/` 下的 `*.bak-hardening-20261009` 为当时备份，可随时清理 |
 | SSH 防爆破 | fail2ban（2026-10-10 安装，已设为开机自启）：sshd jail，10 分钟内失败 5 次封禁 6 小时，重复封禁时长翻倍（上限 1 周）；后端用 polling 读 `/var/log/auth.log`（Ubuntu 24.04 SSH 为 socket 激活，systemd 后端匹配不到日志）；配置在 `/etc/fail2ban/jail.d/bar-ssh.local`；查看 `sudo fail2ban-client status sshd`，解封 `sudo fail2ban-client set sshd unbanip <IP>` |
@@ -30,6 +30,7 @@
 │  ├─ .dockerignore
 │  ├─ backup-accounts.sh                      ← 账号表备份脚本（root cron 每天 03:30 调用）
 │  ├─ index.html   package.json   package-lock.json   tsconfig.json   vite.config.ts
+│  ├─ public/                                 ← 卡面等静态资源（`COPY public` 后在 vite build 时并入 dist/assets）
 │  └─ src/
 │     ├─ client/
 │     │  ├─ App.tsx   Board.tsx   AccountBar.tsx   main.tsx   cards.tsx   RevealStage.tsx
