@@ -15,7 +15,8 @@ import { avatarColor } from '../avatar';
 import { CardFace, cardLabel } from '../cards';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
-import { seatVisualOf } from '../scene';
+import { seatLayout, seatVisualOf } from '../scene';
+import { TableScene } from './TableScene';
 
 const PHASE_LABEL: Record<Phase, string> = {
   magic: '阶段一 · 传币并发动魔法',
@@ -136,6 +137,8 @@ export function Board({
   const [crystalLaunch, setCrystalLaunch] = useState<string | null>(null);
   /** 回合提醒：该脉冲的座位，null = 不播 */
   const [turnPulse, setTurnPulse] = useState<string | null>(null);
+  /** 席位视图：默认环绕（牌桌场景）；窄屏 / 10 人局可切紧凑列表（方案 §5.2 的兜底） */
+  const [compactSeats, setCompactSeats] = useState(false);
   /** 上一帧快照（动效判定的基准）；挂载时为 null → 首帧不播任何动画 */
   const prevSnapRef = useRef<AnimSnapshot | null>(null);
 
@@ -281,9 +284,22 @@ export function Board({
     (p) => p.id !== playerID && p.played && p.handCount > 0,
   );
 
+  /**
+   * 环上坐标（共享纯函数 `scene.seatLayout`）：自己恒在底部居中、其余按「自己起顺时针」。
+   * 「自己」的取值：观战视角聚焦的座位优先（观战切到某座位时环也跟着转），否则就是本人的座位；
+   * 都没有（观战全局）时按座位 1 处理。
+   */
+  const ringSelfSeat =
+    watchSeat !== null ? Number(watchSeat) : playerID === null ? null : Number(playerID);
+  const ringSlots = new Map(
+    seatLayout(ringSelfSeat, G.players.length).map((slot) => [slot.id, slot] as const),
+  );
+  /** 取座位在环上的归一化坐标（紧凑列表模式下只作为行内样式存在、对静态定位不生效） */
+  const slotOf = (seat: string) => ringSlots.get(seat) ?? { id: seat, x: 0.5, y: 0.5, angle: 0 };
+
   function renderPlayers() {
     return (
-      <div className="players">
+      <TableScene compact={compactSeats}>
         {G.players.map((p) => {
           /**
            * 行末标签、水晶编号与持币硬币统一由共享层 `scene.seatVisualOf` 给出
@@ -313,7 +329,14 @@ export function Board({
           // 标注槽位放在行按钮之外：行按钮常处于禁用态（禁用的按钮不会派发点击），
           // 而非睁眼玩家的标注在任何阶段都应该能点。
           return (
-            <div key={p.id} className="player-line" data-prow={p.id}>
+            <div
+              key={p.id}
+              className="player-line"
+              data-prow={p.id}
+              data-slot={p.id}
+              // 环上坐标（归一化 → 百分比）：紧凑列表模式下父级是静态流，left/top 不生效
+              style={{ left: `${slotOf(p.id).x * 100}%`, top: `${slotOf(p.id).y * 100}%` }}
+            >
               {spectating ? (
                 // 观战席看不到睁眼 / 闭眼信息：保留空槽位对齐
                 <span className="eye-slot" aria-hidden="true" />
@@ -394,7 +417,7 @@ export function Board({
             </div>
           );
         })}
-      </div>
+      </TableScene>
     );
   }
 
@@ -671,6 +694,10 @@ export function Board({
               ))}
             </span>
           )}
+          {/* 兜底视图：10 人局或窄屏时切回改造前的竖排列表（方案 §5.2） */}
+          <button className="btn small" onClick={() => setCompactSeats((prev) => !prev)}>
+            {compactSeats ? '环绕席位' : '紧凑列表'}
+          </button>
         </div>
         {renderPlayers()}
         {renderActions()}

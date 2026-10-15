@@ -420,6 +420,97 @@ em.rose-count {
   margin-right: 4px;
 }
 
+/* ══ 牌桌场景（步骤 4 · A2）：桌面 + 席位环绕 ══
+   席位坐标来自共享纯函数 scene.ts 的 seatLayout（归一化 0–1，自己恒在底部居中）
+   ——这里只负责「容器宽高比 → 椭圆」与环上席位卡的紧凑排布；
+   紧凑列表模式（.players）保持改造前原样。 */
+.table-scene {
+  position: relative;
+  width: 100%;
+  /* 扁平一点：席位环不需要那么高，避免把底部席位推到折叠线以下 */
+  aspect-ratio: 16 / 9;
+  margin: 4px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background:
+    radial-gradient(120% 90% at 50% 45%, rgba(216, 178, 106, 0.07), transparent 70%),
+    var(--panel);
+}
+
+/* 环的坐标空间：左右各留 7%，因为 seatLayout 的 x 会取到 0 与 1 附近的极值 */
+.table-ring {
+  position: absolute;
+  inset: 0 7%;
+}
+
+/* 环上的席位：绝对定位到归一化坐标处（行内 left/top 由 Board 按 seatLayout 写入） */
+.table-scene .player-line {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+/* 环上把「行」改排成小卡：座位号 + 头像 + 昵称在上，手牌 / 水晶 / 标签在下
+   （紧凑列表模式不受影响：网格只在这个场景容器内生效） */
+.table-scene .player-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    'seat avatar name'
+    'hand crystal tags';
+  align-items: center;
+  gap: 4px 6px;
+  /* 固定宽度：否则卡片宽度随昵称 / 标签内容变化，环上看起来参差不齐 */
+  width: 132px;
+  padding: 6px 9px;
+  border-radius: 10px;
+}
+
+.table-scene .player-row .seat {
+  grid-area: seat;
+}
+
+.table-scene .player-row .avatar {
+  grid-area: avatar;
+}
+
+.table-scene .player-row .pname {
+  grid-area: name;
+  max-width: 88px;
+  font-size: 12px;
+}
+
+.table-scene .player-row .hand-box {
+  grid-area: hand;
+}
+
+.table-scene .player-row .crystal {
+  grid-area: crystal;
+}
+
+.table-scene .player-row .tags {
+  grid-area: tags;
+  justify-content: flex-end;
+}
+
+/* 环上「（你）」由 .me 的描边色表达，省出一行宽度 */
+.table-scene .player-row .self-slot {
+  display: none;
+}
+
+/* 眼睛标注改成卡片左上角角标（列表模式仍是左侧独立槽位；透明度语义不变） */
+.table-scene .eye-slot {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  z-index: 3;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--bg);
+}
+
 .players {
   display: flex;
   flex-direction: column;
