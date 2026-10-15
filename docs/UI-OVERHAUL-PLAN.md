@@ -1,6 +1,6 @@
 # 《血与刃的白蔷薇》表现层改造方案
 
-> 状态：**进行中**（§2 已拍板 10 项决策；§9 步骤 1 部分完成——7 张卡面画心已产出并逐像素验证，步骤 5「卡面接入」为下一步）｜最后更新：2026-10-14｜关联文档：[DESIGN.md](./DESIGN.md) · [RULES.md](./RULES.md) · [SKILL-LOADOUT-PLAN.md](./SKILL-LOADOUT-PLAN.md) · [DEPLOYMENT.md](./DEPLOYMENT.md)
+> 状态：**进行中**（§2 已拍板 10 项决策；§9 步骤 1 部分完成——7 张卡面画心已产出并逐像素验证、步骤 5「卡面接入」已完成、步骤 6 四项动效触发已确证）｜最后更新：2026-10-15｜关联文档：[DESIGN.md](./DESIGN.md) · [RULES.md](./RULES.md) · [SKILL-LOADOUT-PLAN.md](./SKILL-LOADOUT-PLAN.md) · [DEPLOYMENT.md](./DEPLOYMENT.md) · [PROGRESS.md](./PROGRESS.md)
 
 本文说明「把现有的功能验证型界面改造为 2D 精美插画风」的实现方案，并预留微信小程序作为第二个表现层。
 
