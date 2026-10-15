@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Card } from '../engine';
-import { CardFace } from './cards';
-import { REVEAL_FLIP_MS, REVEAL_TOTAL_MS } from './revealAnim';
+import type { Card } from '../../engine';
+import { CardFace } from '../cards';
+import { REVEAL_FLIP_MS, REVEAL_TOTAL_MS } from '../revealAnim';
 
 interface FlyTarget {
   dx: number;

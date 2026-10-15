@@ -8,13 +8,13 @@ import {
   type GameView,
   type Phase,
   type PlayerViewEntry,
-} from '../engine';
-import { canRandomPlay, canResolveRedraw, handActions } from './boardActions';
-import { COIN_FLIGHT_MS, CRYSTAL_PULSE_MS, TURN_PULSE_MS, planAnims, type AnimSnapshot } from './anims';
-import { avatarColor } from './avatar';
-import { CardFace, cardLabel } from './cards';
+} from '../../engine';
+import { canRandomPlay, canResolveRedraw, handActions } from '../boardActions';
+import { COIN_FLIGHT_MS, CRYSTAL_PULSE_MS, TURN_PULSE_MS, planAnims, type AnimSnapshot } from '../anims';
+import { avatarColor } from '../avatar';
+import { CardFace, cardLabel } from '../cards';
 import { RevealStage } from './RevealStage';
-import { decideRevealAnim, prefersReducedMotion } from './revealAnim';
+import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
 
 const PHASE_LABEL: Record<Phase, string> = {
   magic: '阶段一 · 传币并发动魔法',
