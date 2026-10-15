@@ -11,11 +11,11 @@ import {
 } from '../../engine';
 import { canRandomPlay, canResolveRedraw, handActions } from '../boardActions';
 import { COIN_FLIGHT_MS, CRYSTAL_PULSE_MS, TURN_PULSE_MS, planAnims, type AnimSnapshot } from '../anims';
-import { avatarColor } from '../avatar';
 import { CardFace, cardLabel } from '../cards';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
 import { seatLayout, seatVisualOf } from '../scene';
+import { SeatCard } from './SeatCard';
 import { TableScene } from './TableScene';
 
 const PHASE_LABEL: Record<Phase, string> = {
@@ -306,7 +306,6 @@ export function Board({
            * （口径与 Board 原实现逐字对齐，由 `scene.test.ts` 锁死，供步骤 4 的席位卡复用）。
            */
           const visual = seatVisualOf(G, p, { offline: isOffline(p.id), ai: isAi(p.id) });
-          const tags = visual.tokens;
 
           const selectable =
             (G.phase === 'magic' && isMyTurn && !p.crystalPlaced) ||
@@ -328,93 +327,45 @@ export function Board({
 
           // 标注槽位放在行按钮之外：行按钮常处于禁用态（禁用的按钮不会派发点击），
           // 而非睁眼玩家的标注在任何阶段都应该能点。
-          return (
-            <div
-              key={p.id}
-              className="player-line"
-              data-prow={p.id}
-              data-slot={p.id}
-              // 环上坐标（归一化 → 百分比）：紧凑列表模式下父级是静态流，left/top 不生效
-              style={{ left: `${slotOf(p.id).x * 100}%`, top: `${slotOf(p.id).y * 100}%` }}
+          const eye = spectating ? (
+            // 观战席看不到睁眼 / 闭眼信息：保留空槽位对齐
+            <span className="eye-slot" aria-hidden="true" />
+          ) : isNightViewer ? (
+            <span className={`${eyeClass} locked`} title={eyeTitle}>
+              {eyeOpen ? '👁' : <ClosedEyeMark />}
+            </span>
+          ) : (
+            <button
+              className={eyeClass}
+              aria-pressed={eyeOpen}
+              title={eyeTitle}
+              onClick={() => toggleEyeMark(p.id)}
             >
-              {spectating ? (
-                // 观战席看不到睁眼 / 闭眼信息：保留空槽位对齐
-                <span className="eye-slot" aria-hidden="true" />
-              ) : isNightViewer ? (
-                <span className={`${eyeClass} locked`} title={eyeTitle}>
-                  {eyeOpen ? '👁' : <ClosedEyeMark />}
-                </span>
-              ) : (
-                <button
-                  className={eyeClass}
-                  aria-pressed={eyeOpen}
-                  title={eyeTitle}
-                  onClick={() => toggleEyeMark(p.id)}
-                >
-                  {eyeOpen ? '👁' : <ClosedEyeMark />}
-                </button>
-              )}
-              <button
-                className={`player-row${p.id === playerID ? ' me' : ''}${
-                  pickedTargets.includes(p.id) ? ' picked' : ''
-                }${watchSeat === p.id ? ' focused' : ''}${isOffline(p.id) ? ' offline' : ''}${
-                  turnPulse === p.id ? ' turn-pulse' : ''
-                }`}
-                disabled={!selectable}
-                onClick={() => {
-                  if (G.phase === 'magic') moves.passCoin(p.id);
-                  else if (G.phase === 'magicTargets') toggleTarget(p.id);
-                  else if (G.phase === 'prePick') moves.pickPreShuffleTarget(p.id);
-                  else if (G.phase === 'redraw') moves.resolveRedraw(p.id);
-                }}
-              >
-                <span className="seat">{p.seat + 1}</span>
-                <span className="avatar small" style={{ background: avatarColor(nameOf(p.id)) }}>
-                  {nameOf(p.id).slice(0, 1)}
-                </span>
-                <span className="pname" title={nameOf(p.id)}>
-                  {nameOf(p.id)}
-                </span>
-                {/* 固定宽度的「（你）」槽位：保证手牌框与水晶纵向对齐 */}
-                <span className="self-slot">{p.id === playerID ? '（你）' : ''}</span>
-                <span
-                  className={`hand-box${p.handCount === 0 ? ' empty' : ''}`}
-                  title={`手牌 ${p.handCount} 张`}
-                >
-                  {p.handCount}
-                </span>
-                <span
-                  className={`crystal${p.crystalPlaced ? ' placed' : ''}`}
-                  title={
-                    p.crystalPlaced
-                      ? `水晶 ${visual.crystal.label} 已放上版图`
-                      : p.id === playerID
-                        ? `你的水晶 ${visual.crystal.label}（尚未放出）`
-                        : '水晶尚未放出'
-                  }
-                >
-                  <span className="crystal-body">{visual.crystal.label}</span>
-                </span>
-                {(visual.coin || tags.length > 0) && (
-                  <span className="tags">
-                    {visual.coin && (
-                      <em className="coin" title="持币者（本轮由他传币）" aria-label="持币者">
-                        {/* 空心六角星：两个内接等边三角形的描边 */}
-                        <svg viewBox="0 0 15 15" aria-hidden="true">
-                          <polygon points="7.5 1 1.87 10.75 13.13 10.75" />
-                          <polygon points="7.5 14 1.87 4.25 13.13 4.25" />
-                        </svg>
-                      </em>
-                    )}
-                    {tags.map((t) => (
-                      <em key={t.text} className={`tag${t.gray ? ' gray' : ''}`}>
-                        {t.text}
-                      </em>
-                    ))}
-                  </span>
-                )}
-              </button>
-            </div>
+              {eyeOpen ? '👁' : <ClosedEyeMark />}
+            </button>
+          );
+
+          return (
+            <SeatCard
+              key={p.id}
+              seat={p.id}
+              name={nameOf(p.id)}
+              visual={visual}
+              slotStyle={{ left: `${slotOf(p.id).x * 100}%`, top: `${slotOf(p.id).y * 100}%` }}
+              isSelf={p.id === playerID}
+              picked={pickedTargets.includes(p.id)}
+              focused={watchSeat === p.id}
+              offline={isOffline(p.id)}
+              pulse={turnPulse === p.id}
+              selectable={selectable}
+              onAct={() => {
+                if (G.phase === 'magic') moves.passCoin(p.id);
+                else if (G.phase === 'magicTargets') toggleTarget(p.id);
+                else if (G.phase === 'prePick') moves.pickPreShuffleTarget(p.id);
+                else if (G.phase === 'redraw') moves.resolveRedraw(p.id);
+              }}
+              eye={eye}
+            />
           );
         })}
       </TableScene>
