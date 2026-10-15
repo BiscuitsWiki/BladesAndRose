@@ -137,8 +137,13 @@ export function Board({
   const [crystalLaunch, setCrystalLaunch] = useState<string | null>(null);
   /** 回合提醒：该脉冲的座位，null = 不播 */
   const [turnPulse, setTurnPulse] = useState<string | null>(null);
-  /** 席位视图：默认环绕（牌桌场景）；窄屏 / 10 人局可切紧凑列表（方案 §5.2 的兜底） */
-  const [compactSeats, setCompactSeats] = useState(false);
+  /**
+   * 席位视图：默认环绕（牌桌场景）；10 人局或窄屏时切紧凑列表（方案 §5.2 的兜底）。
+   * 窄屏默认走紧凑：环绕模式的最外侧席位卡有固定宽度，桌子一窄就会横向溢出页面。
+   */
+  const [compactSeats, setCompactSeats] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 720,
+  );
   /** 上一帧快照（动效判定的基准）；挂载时为 null → 首帧不播任何动画 */
   const prevSnapRef = useRef<AnimSnapshot | null>(null);
 
@@ -297,85 +302,158 @@ export function Board({
   /** 取座位在环上的归一化坐标（紧凑列表模式下只作为行内样式存在、对静态定位不生效） */
   const slotOf = (seat: string) => ringSlots.get(seat) ?? { id: seat, x: 0.5, y: 0.5, angle: 0 };
 
-  function renderPlayers() {
+  /**
+   * 桌心版图（步骤 4 · A4）：三栏（献祭区 / 弃牌区 / 血刃区）+ 花苞计数。
+   * 环绕模式下由 TableScene 排进桌心，紧凑列表模式下退回独立「版图」面板。
+   */
+  function renderBoard() {
     return (
-      <TableScene compact={compactSeats}>
-        {G.players.map((p) => {
-          /**
-           * 行末标签、水晶编号与持币硬币统一由共享层 `scene.seatVisualOf` 给出
-           * （口径与 Board 原实现逐字对齐，由 `scene.test.ts` 锁死，供步骤 4 的席位卡复用）。
-           */
-          const visual = seatVisualOf(G, p, { offline: isOffline(p.id), ai: isAi(p.id) });
-
-          const selectable =
-            (G.phase === 'magic' && isMyTurn && !p.crystalPlaced) ||
-            (G.phase === 'magicTargets' && isMyTurn && candidates.some((c) => c.id === p.id)) ||
-            (G.phase === 'prePick' && isMyTurn && prePickPool.includes(p.id)) ||
-            (G.phase === 'redraw' && isMyTurn && redrawCandidates.some((c) => c.id === p.id));
-
-          // 睁眼玩家视角：整列由系统标注（组内=睁眼、组外=未睁眼），不允许修改；
-          // 非睁眼玩家视角：默认半透明「闭眼」，点击在「闭眼 ⇄ 睁眼」之间切换自己的判断。
-          const eyeOpen = isNightViewer ? myNightGroup.includes(p.id) : isEyeMarked(p.id);
-          const eyeClass = `eye-slot${eyeOpen ? ' marked' : ''}`;
-          const eyeTitle = isNightViewer
-            ? eyeOpen
-              ? '夜间睁眼的玩家（系统标注，不可修改）'
-              : '夜间未睁眼的玩家（系统标注，不可修改）'
-            : eyeOpen
-              ? '取消「睁眼」标注'
-              : '标注为「睁眼」玩家（仅记录在你的视角，不会公开）';
-
-          // 标注槽位放在行按钮之外：行按钮常处于禁用态（禁用的按钮不会派发点击），
-          // 而非睁眼玩家的标注在任何阶段都应该能点。
-          const eye = spectating ? (
-            // 观战席看不到睁眼 / 闭眼信息：保留空槽位对齐
-            <span className="eye-slot" aria-hidden="true" />
-          ) : isNightViewer ? (
-            <span className={`${eyeClass} locked`} title={eyeTitle}>
-              {eyeOpen ? '👁' : <ClosedEyeMark />}
+      <div className="board-grid">
+        <div className="board-col">
+          <h3 className="col-head">献祭区</h3>
+          <div className="zone">
+            <h3>
+              白蔷薇{' '}
+              <em className="rose-count">
+                ✿ {G.zones.whiteRose.length}/{G.cardTotals.whiteRose}
+              </em>
+            </h3>
+            <div className="chips">
+              {G.zones.whiteRose.length === 0 ? (
+                <span className="dim">空</span>
+              ) : (
+                G.zones.whiteRose.map((c) => <CardFace key={c.id} card={c} size="mini" />)
+              )}
+            </div>
+          </div>
+          <div className="zone">
+            <h3>
+              普通花苞 <em className="bud">❀ {G.sacrificeBuds}/{G.thresholds.sacrifice}</em>
+            </h3>
+            <div className="chips">
+              {G.zones.sacrifice.length === 0 ? (
+                <span className="dim">空</span>
+              ) : (
+                G.zones.sacrifice.map((c) => <CardFace key={c.id} card={c} size="mini" />)
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="board-col">
+          <h3 className="col-head">弃牌区</h3>
+          <div className="zone board-center">
+            <span className="dim">
+              {G.zones.ghostCount > 0 ? `幽魂 ${G.zones.ghostCount}` : '无'}
             </span>
-          ) : (
-            <button
-              className={eyeClass}
-              aria-pressed={eyeOpen}
-              title={eyeTitle}
-              onClick={() => toggleEyeMark(p.id)}
-            >
-              {eyeOpen ? '👁' : <ClosedEyeMark />}
-            </button>
-          );
-
-          return (
-            <SeatCard
-              key={p.id}
-              seat={p.id}
-              name={nameOf(p.id)}
-              visual={visual}
-              slotStyle={{ left: `${slotOf(p.id).x * 100}%`, top: `${slotOf(p.id).y * 100}%` }}
-              isSelf={p.id === playerID}
-              picked={pickedTargets.includes(p.id)}
-              focused={watchSeat === p.id}
-              offline={isOffline(p.id)}
-              pulse={turnPulse === p.id}
-              selectable={selectable}
-              onAct={() => {
-                if (G.phase === 'magic') moves.passCoin(p.id);
-                else if (G.phase === 'magicTargets') toggleTarget(p.id);
-                else if (G.phase === 'prePick') moves.pickPreShuffleTarget(p.id);
-                else if (G.phase === 'redraw') moves.resolveRedraw(p.id);
-              }}
-              eye={eye}
-            />
-          );
-        })}
-      </TableScene>
+          </div>
+        </div>
+        <div className="board-col">
+          <h3 className="col-head">血刃区</h3>
+          <div className="zone">
+            <h3>
+              血刃 <em className="blade">⚔ {G.zones.blade.length}/{G.cardTotals.blade}</em>
+            </h3>
+            <div className="chips">
+              {G.zones.blade.length === 0 ? (
+                <span className="dim">空</span>
+              ) : (
+                G.zones.blade.map((c) => <CardFace key={c.id} card={c} size="mini" />)
+              )}
+            </div>
+          </div>
+          <div className="zone">
+            <h3>
+              死亡花苞 <em className="bud">❀ {G.deathBuds}/{G.thresholds.death}</em>
+            </h3>
+            <div className="chips">
+              {G.zones.death.length === 0 ? (
+                <span className="dim">空</span>
+              ) : (
+                G.zones.death.map((c) => <CardFace key={c.id} card={c} size="mini" />)
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     );
+  }
+
+  /** 席位卡列表：环上坐标与显示内容都算好，交给外层 TableScene 排布 */
+  function renderSeatCards() {
+    return G.players.map((p) => {
+      /**
+       * 行末标签、水晶编号与持币硬币统一由共享层 `scene.seatVisualOf` 给出
+       * （口径与 Board 原实现逐字对齐，由 `scene.test.ts` 锁死，供步骤 4 的席位卡复用）。
+       */
+      const visual = seatVisualOf(G, p, { offline: isOffline(p.id), ai: isAi(p.id) });
+
+      const selectable =
+        (G.phase === 'magic' && isMyTurn && !p.crystalPlaced) ||
+        (G.phase === 'magicTargets' && isMyTurn && candidates.some((c) => c.id === p.id)) ||
+        (G.phase === 'prePick' && isMyTurn && prePickPool.includes(p.id)) ||
+        (G.phase === 'redraw' && isMyTurn && redrawCandidates.some((c) => c.id === p.id));
+
+      // 睁眼玩家视角：整列由系统标注（组内=睁眼、组外=未睁眼），不允许修改；
+      // 非睁眼玩家视角：默认半透明「闭眼」，点击在「闭眼 ⇄ 睁眼」之间切换自己的判断。
+      const eyeOpen = isNightViewer ? myNightGroup.includes(p.id) : isEyeMarked(p.id);
+      const eyeClass = `eye-slot${eyeOpen ? ' marked' : ''}`;
+      const eyeTitle = isNightViewer
+        ? eyeOpen
+          ? '夜间睁眼的玩家（系统标注，不可修改）'
+          : '夜间未睁眼的玩家（系统标注，不可修改）'
+        : eyeOpen
+          ? '取消「睁眼」标注'
+          : '标注为「睁眼」玩家（仅记录在你的视角，不会公开）';
+
+      // 标注槽位放在行按钮之外：行按钮常处于禁用态（禁用的按钮不会派发点击），
+      // 而非睁眼玩家的标注在任何阶段都应该能点。
+      const eye = spectating ? (
+        // 观战席看不到睁眼 / 闭眼信息：保留空槽位对齐
+        <span className="eye-slot" aria-hidden="true" />
+      ) : isNightViewer ? (
+        <span className={`${eyeClass} locked`} title={eyeTitle}>
+          {eyeOpen ? '👁' : <ClosedEyeMark />}
+        </span>
+      ) : (
+        <button
+          className={eyeClass}
+          aria-pressed={eyeOpen}
+          title={eyeTitle}
+          onClick={() => toggleEyeMark(p.id)}
+        >
+          {eyeOpen ? '👁' : <ClosedEyeMark />}
+        </button>
+      );
+
+      return (
+        <SeatCard
+          key={p.id}
+          seat={p.id}
+          name={nameOf(p.id)}
+          visual={visual}
+          slotStyle={{ left: `${slotOf(p.id).x * 100}%`, top: `${slotOf(p.id).y * 100}%` }}
+          isSelf={p.id === playerID}
+          picked={pickedTargets.includes(p.id)}
+          focused={watchSeat === p.id}
+          offline={isOffline(p.id)}
+          pulse={turnPulse === p.id}
+          selectable={selectable}
+          onAct={() => {
+            if (G.phase === 'magic') moves.passCoin(p.id);
+            else if (G.phase === 'magicTargets') toggleTarget(p.id);
+            else if (G.phase === 'prePick') moves.pickPreShuffleTarget(p.id);
+            else if (G.phase === 'redraw') moves.resolveRedraw(p.id);
+          }}
+          eye={eye}
+        />
+      );
+    });
   }
 
   /**
    * 当前正在进行的步骤。
    * 原先这些提示埋在玩家区底部的操作栏里，等待类文案不够醒目，
-   * 因此独立成「游戏进程」面板，放在版图与玩家区之间。
+   * 因此独立成「游戏进程」面板，紧跟牌桌下方。
    */
   function stepText(): string {
     if (G.phase === 'finished') return '对局已结束。';
@@ -427,7 +505,7 @@ export function Board({
     return '';
   }
 
-  /** 操作按钮：出牌阶段的动作都在手牌区，玩家区只剩换牌阶段的「放弃换牌」 */
+  /** 操作按钮：出牌阶段的动作都在手牌区，牌桌下方只剩换牌阶段的「放弃换牌」 */
   function renderActions() {
     // 扩充技能可能出现「没有可选目标」（如 5 号技能目标池为空）：确认后按空集合结算
     if (G.phase === 'magicTargets' && isMyTurn && (G.pendingMagic?.needTargets ?? 1) === 0) {
@@ -496,76 +574,38 @@ export function Board({
         </div>
       )}
 
-      <div className="panel">
-        <h2>版图</h2>
-        <div className="board-grid">
-          <div className="board-col">
-            <h3 className="col-head">献祭区</h3>
-            <div className="zone">
-              <h3>
-                白蔷薇{' '}
-                <em className="rose-count">
-                  ✿ {G.zones.whiteRose.length}/{G.cardTotals.whiteRose}
-                </em>
-              </h3>
-              <div className="chips">
-                {G.zones.whiteRose.length === 0 ? (
-                  <span className="dim">空</span>
-                ) : (
-                  G.zones.whiteRose.map((c) => <CardFace key={c.id} card={c} size="mini" />)
-                )}
-              </div>
-            </div>
-            <div className="zone">
-              <h3>
-                普通花苞 <em className="bud">❀ {G.sacrificeBuds}/{G.thresholds.sacrifice}</em>
-              </h3>
-              <div className="chips">
-                {G.zones.sacrifice.length === 0 ? (
-                  <span className="dim">空</span>
-                ) : (
-                  G.zones.sacrifice.map((c) => <CardFace key={c.id} card={c} size="mini" />)
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="board-col">
-            <h3 className="col-head">弃牌区</h3>
-            <div className="zone board-center">
-              <span className="dim">
-                {G.zones.ghostCount > 0 ? `幽魂 ${G.zones.ghostCount}` : '无'}
-              </span>
-            </div>
-          </div>
-          <div className="board-col">
-            <h3 className="col-head">血刃区</h3>
-            <div className="zone">
-              <h3>
-                血刃 <em className="blade">⚔ {G.zones.blade.length}/{G.cardTotals.blade}</em>
-              </h3>
-              <div className="chips">
-                {G.zones.blade.length === 0 ? (
-                  <span className="dim">空</span>
-                ) : (
-                  G.zones.blade.map((c) => <CardFace key={c.id} card={c} size="mini" />)
-                )}
-              </div>
-            </div>
-            <div className="zone">
-              <h3>
-                死亡花苞 <em className="bud">❀ {G.deathBuds}/{G.thresholds.death}</em>
-              </h3>
-              <div className="chips">
-                {G.zones.death.length === 0 ? (
-                  <span className="dim">空</span>
-                ) : (
-                  G.zones.death.map((c) => <CardFace key={c.id} card={c} size="mini" />)
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* 牌桌置顶（步骤 4 · A4）：桌面 + 席位环绕 + 桌心版图；视图切换器保留在桌上方 */}
+      <div className="panel-head">
+        <h2>牌桌{spectating ? ' · 观战' : ''}</h2>
+        {spectating && (
+          <span className="seats">
+            <span className="dim">观战视角：</span>
+            <button
+              className={`btn small${watchSeat === null ? ' primary' : ''}`}
+              onClick={() => setWatchSeat(null)}
+            >
+              全局
+            </button>
+            {G.players.map((p) => (
+              <button
+                key={p.id}
+                className={`btn small${watchSeat === p.id ? ' primary' : ''}`}
+                onClick={() => setWatchSeat(p.id)}
+              >
+                座位 {p.seat + 1}
+              </button>
+            ))}
+          </span>
+        )}
+        {/* 兜底视图：窄屏或 10 人局切回改造前的竖排列表（方案 §5.2） */}
+        <button className="btn small" onClick={() => setCompactSeats((prev) => !prev)}>
+          {compactSeats ? '环绕席位' : '紧凑列表'}
+        </button>
       </div>
+      <TableScene compact={compactSeats} center={renderBoard()}>
+        {renderSeatCards()}
+      </TableScene>
+      {renderActions()}
 
       <div className={`panel progress${isMyTurn ? ' me' : ''}`}>
         <div className="panel-head">
@@ -620,38 +660,6 @@ export function Board({
             <span className="dim">{roundSkill.text}</span>
           </p>
         )}
-      </div>
-
-      <div className="panel">
-        <div className="panel-head">
-          <h2>玩家{spectating ? ' · 观战' : ''}</h2>
-          {spectating && (
-            <span className="seats">
-              <span className="dim">观战视角：</span>
-              <button
-                className={`btn small${watchSeat === null ? ' primary' : ''}`}
-                onClick={() => setWatchSeat(null)}
-              >
-                全局
-              </button>
-              {G.players.map((p) => (
-                <button
-                  key={p.id}
-                  className={`btn small${watchSeat === p.id ? ' primary' : ''}`}
-                  onClick={() => setWatchSeat(p.id)}
-                >
-                  座位 {p.seat + 1}
-                </button>
-              ))}
-            </span>
-          )}
-          {/* 兜底视图：10 人局或窄屏时切回改造前的竖排列表（方案 §5.2） */}
-          <button className="btn small" onClick={() => setCompactSeats((prev) => !prev)}>
-            {compactSeats ? '环绕席位' : '紧凑列表'}
-          </button>
-        </div>
-        {renderPlayers()}
-        {renderActions()}
       </div>
 
       {lastReveal && lastReveal.cards.length > 0 && (

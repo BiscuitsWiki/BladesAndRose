@@ -434,13 +434,51 @@ em.rose-count {
   border-radius: 14px;
   background:
     radial-gradient(120% 90% at 50% 45%, rgba(216, 178, 106, 0.07), transparent 70%),
-    var(--panel);
+    var(--surface);
 }
 
-/* 环的坐标空间：左右各留 7%，因为 seatLayout 的 x 会取到 0 与 1 附近的极值 */
+/* 环的坐标空间：左右各留 10%，因为 seatLayout 的 x 会取到 0.0245 / 0.9755 附近的极值，
+   而席位卡本身有固定宽度（132px）——内边距不够时最外侧的卡会横向溢出页面 */
 .table-ring {
   position: absolute;
-  inset: 0 7%;
+  inset: 0 10%;
+}
+
+/* ══ 桌心版图（步骤 4 · A4）：三栏版图收进桌面中央 ══
+   环绕模式下版图不再单独占一块面板，而是坐在席位环中间——自己是底部那张卡、对面在上方，
+   桌心正好落在中间的空档里，与桌面共同构成完整场景。尺寸按桌子的宽高比收紧。 */
+.table-center {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  width: min(58%, 500px);
+  z-index: 1;
+}
+
+/* 桌心空间有限：压掉各区的最小高度与留白，保证三栏都落在桌心里 */
+.table-center .board-grid {
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.table-center .zone {
+  min-height: 0;
+  padding: 7px 8px;
+}
+
+.table-center .zone h3 {
+  font-size: 11px;
+}
+
+.table-center .col-head {
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  font-size: 11px;
+}
+
+.table-center .chips {
+  gap: 4px;
 }
 
 /* 环上的席位：绝对定位到归一化坐标处（行内 left/top 由 Board 按 seatLayout 写入） */
