@@ -1,19 +1,19 @@
-import { ROLE_LABEL, type Card } from '../engine';
+import { type Card } from '../engine';
+import { cardFaceOf } from './scene';
 
-/** 卡牌的显示名（幽魂 / 信者 / 角色名） */
+/** 卡牌的显示名（幽魂 / 信者 / 角色名）；映射本体在共享层 `scene.ts` 的 `cardFaceOf` */
 export function cardLabel(card: Card): string {
-  if (card.kind === 'ghost') return '幽魂';
-  if (card.kind === 'believer') return '信者';
-  return ROLE_LABEL[card.role];
+  return cardFaceOf(card).label;
 }
 
 /**
  * 卡面对应的画心文件：`assets/cards/card-<kind>.webp`。
  * 幽魂与信者有各自的画心；角色牌直接用角色名（信者角色与固定信者共用同一张）。
  * 原始高分辨率 JPG 留档在 `assets-source/cards/`（不参与构建）。
+ * 映射本体在共享层 `scene.ts` 的 `cardFaceOf`。
  */
 export function cardArtKind(card: Card): string {
-  return card.kind === 'role' ? card.role : card.kind;
+  return cardFaceOf(card).kind;
 }
 
 /**
