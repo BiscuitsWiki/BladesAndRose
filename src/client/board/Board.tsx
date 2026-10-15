@@ -15,6 +15,7 @@ import { avatarColor } from '../avatar';
 import { CardFace, cardLabel } from '../cards';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
+import { seatVisualOf } from '../scene';
 
 const PHASE_LABEL: Record<Phase, string> = {
   magic: '阶段一 · 传币并发动魔法',
@@ -253,15 +254,6 @@ export function Board({
     });
   }
 
-  /**
-   * 水晶编号：本人始终知道自己的编号；其他人只有在放出后才知道
-   * （放出时会翻面放上版图，于是 crystalTrack 成为公开信息）。
-   */
-  function crystalLabel(p: PlayerViewEntry): string {
-    const value = p.crystal ?? G.crystalTrack.find((t) => t.player === p.id)?.value;
-    return value === undefined ? '' : String(value);
-  }
-
   /** 自己那枚水晶对应的技能：编号只是指针，玩家看不到技能时就无从决策（技能从 G.skills 派生） */
   const mySkillId = me?.crystal === undefined ? undefined : G.skills[me.crystal];
   const mySkill = mySkillId ? SKILLS[mySkillId] : null;
@@ -293,20 +285,12 @@ export function Board({
     return (
       <div className="players">
         {G.players.map((p) => {
-          /** 行末标签；gray 用于「已跳过」这类灰色次要状态 */
-          const tags: { text: string; gray?: boolean }[] = [];
-          // 断线 / 托管状态放在最前：一眼能看到谁掉线了、谁由 AI 代操作
-          if (isAi(p.id)) tags.push({ text: 'AI 托管', gray: true });
-          else if (isOffline(p.id)) tags.push({ text: '断线中', gray: true });
-          // 持币者不用文字标签，改用行末的硬币图案标记
-          if (G.modifiers.mustPlay.includes(p.id)) tags.push({ text: '必须出牌' });
-          if (G.modifiers.mustPlayRandom.includes(p.id)) tags.push({ text: '随机出牌' });
-          if (G.modifiers.mustPass.includes(p.id)) tags.push({ text: '必须跳过' });
-          if (G.pendingRedraw === p.id) tags.push({ text: '必须换牌' });
-          if (G.modifiers.goLastOption === p.id && !G.modifiers.goLastUsed) tags.push({ text: '可殿后' });
-          if (G.modifiers.pairs.some((pair) => pair.includes(p.id))) tags.push({ text: '行动绑定' });
-          if (p.played) tags.push({ text: '已出牌' });
-          if (p.passed) tags.push({ text: '已跳过', gray: true }); // 不用金色，与「已出牌」区分
+          /**
+           * 行末标签、水晶编号与持币硬币统一由共享层 `scene.seatVisualOf` 给出
+           * （口径与 Board 原实现逐字对齐，由 `scene.test.ts` 锁死，供步骤 4 的席位卡复用）。
+           */
+          const visual = seatVisualOf(G, p, { offline: isOffline(p.id), ai: isAi(p.id) });
+          const tags = visual.tokens;
 
           const selectable =
             (G.phase === 'magic' && isMyTurn && !p.crystalPlaced) ||
@@ -380,17 +364,17 @@ export function Board({
                   className={`crystal${p.crystalPlaced ? ' placed' : ''}`}
                   title={
                     p.crystalPlaced
-                      ? `水晶 ${crystalLabel(p)} 已放上版图`
+                      ? `水晶 ${visual.crystal.label} 已放上版图`
                       : p.id === playerID
-                        ? `你的水晶 ${crystalLabel(p)}（尚未放出）`
+                        ? `你的水晶 ${visual.crystal.label}（尚未放出）`
                         : '水晶尚未放出'
                   }
                 >
-                  <span className="crystal-body">{crystalLabel(p)}</span>
+                  <span className="crystal-body">{visual.crystal.label}</span>
                 </span>
-                {(G.coinHolder === p.id || tags.length > 0) && (
+                {(visual.coin || tags.length > 0) && (
                   <span className="tags">
-                    {G.coinHolder === p.id && (
+                    {visual.coin && (
                       <em className="coin" title="持币者（本轮由他传币）" aria-label="持币者">
                         {/* 空心六角星：两个内接等边三角形的描边 */}
                         <svg viewBox="0 0 15 15" aria-hidden="true">
