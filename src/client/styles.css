@@ -490,8 +490,10 @@ em.rose-count {
 .table-scene {
   position: relative;
   width: 100%;
-  /* 扁平一点：席位环不需要那么高，避免把底部席位推到折叠线以下 */
-  aspect-ratio: 16 / 9;
+  /* 3:2 而非 16:9：席位卡内缩进桌后，斜对角席位与桌心版图要同时容下，
+     16:9 的竖向空间不够（实测反馈：靠中间的席位卡会压住桌心的公开牌区）。
+     3:2 下「上席带下沿 ↔ 下斜席上沿」的空档约 250px，足够放下桌心版图。 */
+  aspect-ratio: 3 / 2;
   margin: 4px 0 8px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -500,23 +502,47 @@ em.rose-count {
     var(--surface);
 }
 
-/* 环的坐标空间：左右各留 10%，因为 seatLayout 的 x 会取到 0.0245 / 0.9755 附近的极值，
-   而席位卡本身有固定宽度（132px）——内边距不够时最外侧的卡会横向溢出页面 */
+/* 环的坐标空间：固定内缩 垂直 46px / 水平 78px ≥ 席位卡半尺寸（32/66px）+ 眼睛角标外伸（8px）。
+   席位卡以坐标点为中心 translate(-50%,-50%)，而绝对定位子元素的包含块是 padding box
+   ——旧的「上下 0、左右 10%」救不了任何方向：6/8/10 人局 seatLayout 会给出 y=0 的
+   上中席位、8 人局还有 x=0/1 的正左右席位，卡片各有一半伸出牌桌矩形（实测反馈）。
+   卡片定宽 132px、高约 64px，固定像素在任何 ≥720px 视口下都能保证完整落在桌内。 */
 .table-ring {
   position: absolute;
-  inset: 0 10%;
+  inset: 46px 78px;
 }
 
 /* ══ 桌心版图（步骤 4 · A4）：三栏版图收进桌面中央 ══
    环绕模式下版图不再单独占一块面板，而是坐在席位环中间——自己是底部那张卡、对面在上方，
-   桌心正好落在中间的空档里，与桌面共同构成完整场景。尺寸按桌子的宽高比收紧。 */
+   桌心正好落在中间的空档里，与桌面共同构成完整场景。尺寸按桌子的宽高比收紧。
+   宽度 47% 与上移量按几何扫描定出（seatLayout 单位圆坐标 × 环盒 × 132px 席位卡）：
+   53% 时 6/9 人局的左右席位（x≈0.07/0.93, y≈0.25）与 5/10 人局的斜席（y≈0.65）会压住
+   桌心两侧，窄桌（scene≈686–750）最重 68×75px；47% 后 ≥750 全通过，686 下只剩 ≤6px
+   的发丝擦边（720px 视口以下是紧凑列表兜底的领域）。 */
 .table-center {
   position: absolute;
   left: 50%;
-  top: 46%;
+  top: 48%;
   transform: translate(-50%, -50%);
-  width: min(58%, 500px);
+  width: min(47%, 420px);
   z-index: 1;
+}
+
+/* 桌心 mini 卡改小（28×42，仅插画）：保留 44×66 卡名条会把版图撑到 ~251px 高，
+   超出上下席位带之间的空档（5 人局斜席上沿 ~398 − 8 人局上席下沿 ~147）。
+   区名与计数（X/Y）仍在 h3 上；卡的身份由插画辨认，悬停 title 有全名，
+   完整卡名在「上一轮公开」与紧凑列表里始终可见。 */
+.table-center .cardface.mini {
+  width: 28px;
+  height: 42px;
+}
+
+.table-center .cardface.mini .cardface-name {
+  display: none;
+}
+
+.table-center .cardface.mini .cardface-corner {
+  width: 7px;
 }
 
 /* 桌心空间有限：压掉各区的最小高度与留白，保证三栏都落在桌心里 */
@@ -541,7 +567,9 @@ em.rose-count {
 }
 
 .table-center .chips {
-  gap: 4px;
+  /* 间距 2px：桌心收窄到 47% 后，7–10 人局的 4 张 mini（4×28 + 3×间距）在 ≈120px 的
+     侧栏里必须单行放下，否则换行会把版图撑高、重新撞上席位卡 */
+  gap: 2px;
 }
 
 /* 环上的席位：绝对定位到归一化坐标处（行内 left/top 由 Board 按 seatLayout 写入） */

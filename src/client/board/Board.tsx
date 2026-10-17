@@ -315,7 +315,9 @@ export function Board({
               {G.zones.whiteRose.length === 0 ? (
                 <span className="dim">空</span>
               ) : (
-                G.zones.whiteRose.map((c) => <CardFace key={c.id} card={c} size="mini" />)
+                G.zones.whiteRose.map((c) => (
+                  <CardFace key={c.id} card={c} size="mini" title={cardLabel(c)} />
+                ))
               )}
             </div>
           </div>
@@ -330,7 +332,9 @@ export function Board({
               {G.zones.sacrifice.length === 0 ? (
                 <span className="dim">空</span>
               ) : (
-                G.zones.sacrifice.map((c) => <CardFace key={c.id} card={c} size="mini" />)
+                G.zones.sacrifice.map((c) => (
+                  <CardFace key={c.id} card={c} size="mini" title={cardLabel(c)} />
+                ))
               )}
             </div>
           </div>
@@ -353,7 +357,9 @@ export function Board({
               {G.zones.blade.length === 0 ? (
                 <span className="dim">空</span>
               ) : (
-                G.zones.blade.map((c) => <CardFace key={c.id} card={c} size="mini" />)
+                G.zones.blade.map((c) => (
+                  <CardFace key={c.id} card={c} size="mini" title={cardLabel(c)} />
+                ))
               )}
             </div>
           </div>
