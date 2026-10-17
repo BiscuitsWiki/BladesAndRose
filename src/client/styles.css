@@ -546,7 +546,7 @@ em.rose-count {
   z-index: 2;
 }
 
-/* 环上把「行」改排成小卡：座位号 + 头像 + 昵称在上，手牌 / 水晶居中，
+/* 环上把「行」改排成小卡：座位号 + 头像 + 昵称在上，手牌 / 水晶 / 持币居中，
    标注独占下方整行（用户要求：标注正常横向排布、完整可见，预留两行空间——
    一般玩家标注 ≤3 个：行 1 容两个，第 3 个折行；≥4 个超出 3 行封顶隐藏）。
    紧凑列表模式不受影响：网格只在这个场景容器内生效。 */
@@ -555,7 +555,7 @@ em.rose-count {
   grid-template-columns: auto auto minmax(0, 1fr);
   grid-template-areas:
     'seat avatar name'
-    'hand crystal .'
+    'hand crystal coin'
     'tags tags tags';
   align-items: center;
   gap: 3px 6px;
@@ -585,6 +585,13 @@ em.rose-count {
 
 .table-scene .player-row .crystal {
   grid-area: crystal;
+}
+
+/* 持币硬币独占一格（手牌 / 水晶同行，用户要求）；非持币时格子留空、卡片尺寸不变 */
+.table-scene .player-row .coin-cell {
+  grid-area: coin;
+  display: grid;
+  place-items: center;
 }
 
 /* 标注区：独占第三行、全宽换行排布；紧凑药丸（11px 字 + 1.3 行高 ≈ 18px/行），

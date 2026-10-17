@@ -93,17 +93,20 @@ export function SeatCard({
           <CrystalHex placed={visual.crystal.placed} />
           <span className="crystal-body">{visual.crystal.label}</span>
         </span>
-        {(visual.coin || visual.tokens.length > 0) && (
+        {/* 持币硬币：环上布局独占一格（手牌 / 水晶同行）；紧凑列表里在标注区之前 */}
+        <span className="coin-cell">
+          {visual.coin && (
+            <em className="coin" title="持币者（本轮由他传币）" aria-label="持币者">
+              {/* 空心六角星：两个内接等边三角形的描边 */}
+              <svg viewBox="0 0 15 15" aria-hidden="true">
+                <polygon points="7.5 1 1.87 10.75 13.13 10.75" />
+                <polygon points="7.5 14 1.87 4.25 13.13 4.25" />
+              </svg>
+            </em>
+          )}
+        </span>
+        {visual.tokens.length > 0 && (
           <span className="tags">
-            {visual.coin && (
-              <em className="coin" title="持币者（本轮由他传币）" aria-label="持币者">
-                {/* 空心六角星：两个内接等边三角形的描边 */}
-                <svg viewBox="0 0 15 15" aria-hidden="true">
-                  <polygon points="7.5 1 1.87 10.75 13.13 10.75" />
-                  <polygon points="7.5 14 1.87 4.25 13.13 4.25" />
-                </svg>
-              </em>
-            )}
             {visual.tokens.map((token) => (
               <em
                 key={token.text}
