@@ -21,20 +21,21 @@ export function TableScene({
   children,
 }: {
   compact: boolean;
-  /** 桌心版图（环绕模式）／独立「版图」面板（紧凑模式） */
+  /** 紧凑模式：独立「版图」面板内容（渲染在玩家列表下方）；环绕模式：桌心纹章水印 */
   center?: ReactNode;
   children: ReactNode;
 }) {
   if (compact) {
     return (
       <>
+        {/* 玩家列表在上、版图在下——与环绕模式（牌桌在上、版图面板在下）保持一致 */}
+        <div className="players">{children}</div>
         {center && (
           <div className="panel">
             <h2>版图</h2>
             {center}
           </div>
         )}
-        <div className="players">{children}</div>
       </>
     );
   }
