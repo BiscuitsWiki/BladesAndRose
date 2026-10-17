@@ -514,23 +514,29 @@ em.rose-count {
 /* ══ 桌心：纹章水印（2026-10-17 改版）══
    桌心版图（A4）为塞进席位环付出了一整条代价链——桌子拉高到 3:2、桌心收窄到 47%、
    mini 缩到 28×42 且无卡名、每区 cap 2 张 +「+N」、720–790 过渡带必然擦碰——实测观感
-   太紧凑。版图移回牌桌下方的全宽独立面板（44×66 带卡名、全量显示），桌心只留低透明度
-   纹章水印撑场景感。pointer-events 关掉，不拦截席位环的任何交互。 */
+   太紧凑。版图移回牌桌下方的全宽独立面板（44×66 带卡名、全量显示），桌心只留大块
+   纹章水印——铺满桌心、观感如一块桌布。pointer-events 关掉，不拦截席位环的任何交互。 */
 .table-center {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  /* 与席位环同一坐标空间（inset 同 .table-ring），水印居中铺在环内 */
+  inset: 46px 78px;
+  display: grid;
+  place-items: center;
   z-index: 1;
   pointer-events: none;
 }
 
 .table-watermark {
-  opacity: 0.08;
+  /* 宽度定在带 inset 的 .table-center 网格里（有确定宽度，百分比不循环解析）；
+     svg 用 100% 跟随。76% ≈ 铺满桌心的「桌布」观感，又不碰环上的席位卡 */
+  width: 76%;
+  max-width: 640px;
+  opacity: 0.09;
 }
 
 .table-watermark .hall-emblem {
-  width: min(300px, 52%);
+  width: 100%;
+  margin: 0;
 }
 
 /* 环上的席位：绝对定位到归一化坐标处（行内 left/top 由 Board 按 seatLayout 写入） */
