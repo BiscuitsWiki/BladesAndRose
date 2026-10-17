@@ -11,7 +11,7 @@ import {
 } from '../../engine';
 import { canRandomPlay, canResolveRedraw, handActions } from '../boardActions';
 import { COIN_FLIGHT_MS, CRYSTAL_PULSE_MS, TURN_PULSE_MS, planAnims, type AnimSnapshot } from '../anims';
-import { BudMark, ClosedEyeMark, CrystalHex, HallEmblem, OpenEyeMark } from '../artwork';
+import { BudMark, ClosedEyeMark, CrystalHex, OpenEyeMark } from '../artwork';
 import { CardFace, cardLabel } from '../cards';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
@@ -51,13 +51,6 @@ export function ZoneChips({ cards }: { cards: Card[] }) {
 }
 
 /** 半透明「闭眼」标记：闭眼/睁眼图标本体在 artwork.tsx（与大厅装饰资源同库管理） */
-
-/** 环绕模式的桌心：低透明度纹章水印（版图已移回独立面板，桌心只撑场景感） */
-const TABLE_WATERMARK = (
-  <div className="table-watermark" aria-hidden="true">
-    <HallEmblem />
-  </div>
-);
 
 /**
  * 传币动画：硬币从上一位持币者的玩家行飞向新持币者的玩家行。
@@ -574,7 +567,13 @@ export function Board({
         </div>
       )}
 
-      {/* 牌桌置顶（步骤 4 · A4）：桌面 + 席位环绕 + 桌心版图；视图切换器保留在桌上方 */}
+      {/* 版图（出牌公式区域）统一在最上：全宽独立面板，两种模式顺序一致（牌桌 / 列表在其下） */}
+      <div className="panel">
+        <h2>版图</h2>
+        {renderBoard()}
+      </div>
+
+      {/* 牌桌置顶（步骤 4 · A2）：桌面 + 席位环绕 + 桌心纹章水印；视图切换器保留在桌上方 */}
       <div className="panel-head">
         <h2>牌桌{spectating ? ' · 观战' : ''}</h2>
         {spectating && (
@@ -602,15 +601,7 @@ export function Board({
           {compactSeats ? '环绕席位' : '紧凑列表'}
         </button>
       </div>
-      <TableScene compact={compactSeats} center={compactSeats ? renderBoard() : TABLE_WATERMARK}>
-        {renderSeatCards()}
-      </TableScene>
-      {!compactSeats && (
-        <div className="panel">
-          <h2>版图</h2>
-          {renderBoard()}
-        </div>
-      )}
+      <TableScene compact={compactSeats}>{renderSeatCards()}</TableScene>
       {renderActions()}
 
       <div className={`panel progress${isMyTurn ? ' me' : ''}`}>
