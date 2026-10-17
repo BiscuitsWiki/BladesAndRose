@@ -443,6 +443,7 @@ export function Board({
           focused={watchSeat === p.id}
           offline={isOffline(p.id)}
           pulse={turnPulse === p.id}
+          acting={G.currentActor === p.id}
           selectable={selectable}
           onAct={() => {
             if (G.phase === 'magic') moves.passCoin(p.id);

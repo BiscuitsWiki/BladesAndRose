@@ -716,6 +716,18 @@ em.rose-count {
   border-color: var(--gold);
 }
 
+/* ══ 当前行动者：绿色光晕常驻 ══
+   G.currentActor 是当前行动者（阶段交替 / 结束后为 null，光晕随之消失）；
+   turn-pulse 是换人瞬间的一次性金色脉冲，本规则是行动期间的持续标识，二者叠加。
+   box-shadow 不参与布局，席位卡尺寸不变（布局预算见 PROGRESS §8「会增长的内容必须封顶」）。
+   放在 .me / .picked / hover 之后：同为两级选择器，后写的胜出——行动中优先显示绿色。 */
+.player-row.acting {
+  border-color: rgba(94, 178, 118, 0.9);
+  box-shadow:
+    0 0 0 1.5px rgba(94, 178, 118, 0.65),
+    0 0 14px rgba(94, 178, 118, 0.35);
+}
+
 .seat {
   width: 22px;
   height: 22px;

@@ -26,6 +26,7 @@ export function SeatCard({
   focused,
   offline,
   pulse,
+  acting,
   selectable,
   onAct,
   eye,
@@ -46,6 +47,8 @@ export function SeatCard({
   offline: boolean;
   /** 本轮行动者：播放一次金色脉冲 */
   pulse: boolean;
+  /** 当前行动者（G.currentActor）：行动期间绿色光晕常驻 */
+  acting: boolean;
   /** 当前阶段是否可点（决定行按钮是否禁用） */
   selectable: boolean;
   onAct: () => void;
@@ -54,7 +57,7 @@ export function SeatCard({
 }) {
   const rowClass = `player-row${isSelf ? ' me' : ''}${picked ? ' picked' : ''}${
     focused ? ' focused' : ''
-  }${offline ? ' offline' : ''}${pulse ? ' turn-pulse' : ''}`;
+  }${offline ? ' offline' : ''}${pulse ? ' turn-pulse' : ''}${acting ? ' acting' : ''}`;
 
   return (
     <div className="player-line" data-prow={seat} data-slot={seat} style={slotStyle}>
