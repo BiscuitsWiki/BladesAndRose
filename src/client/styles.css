@@ -827,8 +827,10 @@ em.rose-count {
 /* 持币标记：银色钱币（金属渐变 + 六角星刻纹），替代原先的「持币」文字标签 */
 .coin {
   flex: none;
-  width: 15px;
-  height: 15px;
+  /* 22×22：与手牌框（26×22）、水晶（22×24）同一量级（用户要求三者观感一致）；
+     传币飞行的硬币（26px）保持略大以突出动态 */
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -839,10 +841,11 @@ em.rose-count {
     inset 0 -1.5px 2px rgba(45, 50, 56, 0.35);
 }
 
-/* 空心六角星：两个内接等边三角形的描边（不填充）；外接圆半径 6.5px，顶点落在硬币内圈线上 */
+/* 空心六角星：两个内接等边三角形的描边（不填充）；外接圆半径随硬币等比缩放
+   （15 单位 viewBox 拉满硬币，顶点落在硬币内圈线上） */
 .coin svg {
-  width: 15px;
-  height: 15px;
+  width: 22px;
+  height: 22px;
   fill: none;
   stroke: rgba(88, 96, 104, 0.85);
   stroke-width: 0.9;
