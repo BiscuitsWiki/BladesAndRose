@@ -789,16 +789,37 @@ em.rose-count {
   flex-wrap: wrap;
 }
 
-/* ══ 环上席位卡的状态标签限一行 ══
-   标签是独立 if 叠加，引擎语义下可同时挂 5 个（AI 托管 / 随机出牌 / 可殿后 /
-   行动绑定 / 已出牌）——换行会把卡片撑到 ~171px（8 个极端 278px），出界并互叠（实测）。
-   环上限一行 + 截断：高优标签（断线 / 托管）排在最前所以裁尾部，完整文字看 title
-   （SeatCard 已给每个 tag 补 title），全量显示在紧凑列表模式。 */
+/* ══ 环上席位卡的状态标注 ══
+   标注是独立 if 叠加，引擎语义下可同时挂 5 个（AI 托管 / 随机出牌 / 可殿后 /
+   行动绑定 / 已出牌）。基础视口（<832px）：单行截断防撑爆（见下方宽屏块的反证）；
+   高优标签（断线 / 托管）排在最前所以裁尾部，完整文字看 title（SeatCard 每个
+   tag 都补了 title），全量显示在紧凑列表模式。 */
 .table-scene .tags {
   flex-wrap: nowrap;
   justify-content: flex-start;
   overflow: hidden;
   max-height: 22px;
+}
+
+/* ══ 宽屏（视口 ≥832px）：席位卡加宽，状态标注预留两行 ══
+   用户反馈「2 个以上标注容纳不下、一般不超过 3 个」：卡宽 132 → 148 后
+   行 1 能放下任意两个标注（含两个四字），第 3 个折到行 2，不再截断；
+   卡高 63 → 87 仅在标注 ≥3 的席位出现。
+   几何模型（848 场景，inset 56/86）：5–10 人局 63/87 卡全干净（最大 0.8px 发丝擦碰）；
+   832 以下维持窄卡单行——148 宽卡在 9/10 人局会横向互叠 20–45px（模型实测）。 */
+@media (min-width: 832px) {
+  .table-ring {
+    inset: 56px 86px;
+  }
+
+  .table-scene .player-row {
+    width: 148px;
+  }
+
+  .table-scene .tags {
+    flex-wrap: wrap;
+    max-height: 48px;
+  }
 }
 
 .tag {
