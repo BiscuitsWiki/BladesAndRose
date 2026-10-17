@@ -28,7 +28,8 @@ export function DistributionEditor({
             // 白蔷薇与暗刃必须有且只能有 1 名，配比界面固定不可调
             const fixed = role === 'whiteRose' || role === 'darkBlade';
             return (
-              <tr key={role}>
+              // data-role 供 CSS 画阵营色点（白蔷薇玫瑰白 / 暗刃血红 / 刃系钢蓝 / 其余金）
+              <tr key={role} data-role={role}>
                 <td className="role-name">{ROLE_LABEL[role]}</td>
                 <td className="dim">{fixed ? '固定 1' : `官方 ${official[role]}`}</td>
                 <td className="stepper">

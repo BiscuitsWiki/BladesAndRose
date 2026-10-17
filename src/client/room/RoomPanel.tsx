@@ -100,7 +100,7 @@ export function RoomPanel({
               </span>
               <span className="seat-no">
                 座位 {i + 1}
-                {id === info.hostSeat ? ' · 房主' : ''}
+                {id === info.hostSeat && <em className="host-chip">房主</em>}
                 {ai ? ' · AI 托管' : offline ? ' · 断线中' : ''}
               </span>
             </button>

@@ -1,5 +1,6 @@
 import { type CSSProperties, type ReactNode } from 'react';
 import { avatarColor } from '../avatar';
+import { CrystalHex } from '../artwork';
 import type { SeatVisual } from '../scene';
 
 /**
@@ -86,6 +87,7 @@ export function SeatCard({
                 : '水晶尚未放出'
           }
         >
+          <CrystalHex placed={visual.crystal.placed} />
           <span className="crystal-body">{visual.crystal.label}</span>
         </span>
         {(visual.coin || visual.tokens.length > 0) && (

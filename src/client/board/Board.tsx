@@ -11,6 +11,7 @@ import {
 } from '../../engine';
 import { canRandomPlay, canResolveRedraw, handActions } from '../boardActions';
 import { COIN_FLIGHT_MS, CRYSTAL_PULSE_MS, TURN_PULSE_MS, planAnims, type AnimSnapshot } from '../anims';
+import { BudMark, ClosedEyeMark, CrystalHex, OpenEyeMark } from '../artwork';
 import { CardFace, cardLabel } from '../cards';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
@@ -32,15 +33,7 @@ const FACTION_LABEL: Record<Faction, string> = {
   bloodBlade: '血刃阵营',
 };
 
-/** 半透明「闭眼」标记：下弯眼睑 + 三根睫毛（纯描边，跟随 currentColor 与槽位透明度） */
-function ClosedEyeMark() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M2.1 6.2Q8 12.6 13.9 6.2" />
-      <path d="M5.05 8.6L4.15 10.4M8 9.4V11.4M10.95 8.6L11.85 10.4" />
-    </svg>
-  );
-}
+/** 半透明「闭眼」标记：闭眼/睁眼图标本体在 artwork.tsx（与大厅装饰资源同库管理） */
 
 /**
  * 传币动画：硬币从上一位持币者的玩家行飞向新持币者的玩家行。
@@ -328,7 +321,10 @@ export function Board({
           </div>
           <div className="zone">
             <h3>
-              普通花苞 <em className="bud">❀ {G.sacrificeBuds}/{G.thresholds.sacrifice}</em>
+              普通花苞{' '}
+              <em className="bud">
+                <BudMark /> {G.sacrificeBuds}/{G.thresholds.sacrifice}
+              </em>
             </h3>
             <div className="chips">
               {G.zones.sacrifice.length === 0 ? (
@@ -363,7 +359,10 @@ export function Board({
           </div>
           <div className="zone">
             <h3>
-              死亡花苞 <em className="bud">❀ {G.deathBuds}/{G.thresholds.death}</em>
+              死亡花苞{' '}
+              <em className="bud bud-dead">
+                <BudMark dead /> {G.deathBuds}/{G.thresholds.death}
+              </em>
             </h3>
             <div className="chips">
               {G.zones.death.length === 0 ? (
@@ -412,7 +411,7 @@ export function Board({
         <span className="eye-slot" aria-hidden="true" />
       ) : isNightViewer ? (
         <span className={`${eyeClass} locked`} title={eyeTitle}>
-          {eyeOpen ? '👁' : <ClosedEyeMark />}
+          {eyeOpen ? <OpenEyeMark /> : <ClosedEyeMark />}
         </span>
       ) : (
         <button
@@ -421,7 +420,7 @@ export function Board({
           title={eyeTitle}
           onClick={() => toggleEyeMark(p.id)}
         >
-          {eyeOpen ? '👁' : <ClosedEyeMark />}
+          {eyeOpen ? <OpenEyeMark /> : <ClosedEyeMark />}
         </button>
       );
 
@@ -637,6 +636,7 @@ export function Board({
             if (!entry) {
               return (
                 <span key={i} className="track-hex" title={`第 ${i + 1} 轮（尚未发动）`}>
+                  <CrystalHex />
                   <span className="track-hex-body" />
                 </span>
               );
@@ -647,6 +647,7 @@ export function Board({
                 className={`track-hex filled${launching ? ' launching' : ''}`}
                 title={`第 ${i + 1} 轮 · ${nameOf(entry.player)} 发动水晶 ${entry.value}`}
               >
+                <CrystalHex placed />
                 <span className="track-hex-body">{entry.value}</span>
               </span>
             );

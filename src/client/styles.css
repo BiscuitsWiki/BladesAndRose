@@ -54,7 +54,65 @@ h3 {
 }
 
 .lobby {
-  padding-top: 40px;
+  padding-top: 24px;
+}
+
+/* 大厅头部：程序画纹章（白玫瑰 + 双刃，见 artwork.tsx 的 HallEmblem）+ 标题 */
+.lobby-head {
+  text-align: center;
+  padding-bottom: 6px;
+}
+
+.hall-emblem {
+  display: block;
+  width: min(320px, 88%);
+  height: auto;
+  margin: 0 auto 2px;
+}
+
+.lobby-head h1 {
+  margin: 0;
+  color: var(--gold);
+  letter-spacing: 0.14em;
+}
+
+.lobby-head .dim {
+  margin: 4px auto 0;
+  max-width: 560px;
+}
+
+/* 大厅分节：与牌桌面板同一套卡片语言 */
+.lobby-sec {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  margin: 14px 0;
+}
+
+/* 分节标题：金色菱形起头 + 右侧渐隐细线（只作用于大厅内的 h2） */
+.lobby h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.lobby h2::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  background: var(--gold);
+  transform: rotate(45deg);
+  opacity: 0.85;
+}
+
+.lobby h2::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, rgba(216, 178, 106, 0.4), transparent);
 }
 
 .topbar {
@@ -155,35 +213,25 @@ h3 {
   margin-bottom: 10px;
 }
 
+/* 六边形宝石（SVG 本体见 artwork.tsx 的 CrystalHex）：容器只负责定位与尺寸 */
 .track-hex {
   width: 26px;
   height: 28px;
+  position: relative;
   display: grid;
   place-items: center;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  background: var(--border);
 }
 
 .track-hex-body {
-  width: calc(100% - 2px);
-  height: calc(100% - 2px);
-  display: grid;
-  place-items: center;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  background: var(--bg);
+  position: relative;
   color: var(--muted);
   font-size: 12px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-/* 已发动的水晶：与玩家区已放出水晶（.crystal.placed）完全一致的浅灰样式 */
-.track-hex.filled {
-  background: #8d8582;
-}
-
+/* 已发动的水晶：编号转深色（与玩家区已放出水晶 .crystal.placed 同一观感，色值在 SVG 内） */
 .track-hex.filled .track-hex-body {
-  background: #b6afac;
   color: #241f1e;
   font-weight: 600;
 }
@@ -359,8 +407,23 @@ h3 {
 }
 
 em.bud {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   color: var(--gold);
   font-style: normal;
+}
+
+/* 花苞图标本体（SVG 见 artwork.tsx 的 BudMark）：竖直苞 11×15 */
+em.bud > svg {
+  flex: none;
+  width: 11px;
+  height: 15px;
+}
+
+/* 死亡花苞：灰白凋谢形，与金色的献祭花苞区分 */
+em.bud-dead {
+  color: var(--muted);
 }
 
 em.blade {
@@ -680,36 +743,34 @@ em.rose-count {
   opacity: 0.45;
 }
 
-/* 水晶：六边形；未放出为黑色，放出后转浅灰并显示编号 */
+/* 水晶：六边形宝石（SVG 本体见 artwork.tsx 的 CrystalHex）；未放出为暗色，放出后转浅灰白 */
 .crystal {
   flex: none;
   width: 22px;
   height: 24px;
+  position: relative;
   display: grid;
   place-items: center;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  background: #55504d;
+}
+
+/* SVG 宝石铺满容器，文字层（编号）浮在其上 */
+.crystal > svg,
+.track-hex > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .crystal-body {
-  width: calc(100% - 2px);
-  height: calc(100% - 2px);
-  display: grid;
-  place-items: center;
-  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  background: #0a0807;
+  position: relative;
   color: var(--rose);
   font-size: 11px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-.crystal.placed {
-  background: #8d8582;
-}
-
 .crystal.placed .crystal-body {
-  background: #b6afac;
   color: #241f1e;
 }
 
@@ -745,7 +806,10 @@ em.rose-count {
   place-items: center;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #f4f6f8, #c6ccd2 55%, #8d959d);
-  box-shadow: inset 0 0 0 1px rgba(45, 50, 56, 0.45);
+  box-shadow:
+    inset 0 0 0 1px rgba(45, 50, 56, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.55),
+    inset 0 -1.5px 2px rgba(45, 50, 56, 0.35);
 }
 
 /* 空心六角星：两个内接等边三角形的描边（不填充）；外接圆半径 6.5px，顶点落在硬币内圈线上 */
@@ -1039,6 +1103,28 @@ em.rose-count {
   color: var(--muted);
 }
 
+/* 房主标记：金色小徽标（替代原先的「 · 房主」纯文本） */
+.host-chip {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--gold);
+  border: 1px solid rgba(216, 178, 106, 0.6);
+  border-radius: 999px;
+  padding: 0 5px;
+  margin-left: 3px;
+  vertical-align: 1px;
+}
+
+/* 空座位：头像圈虚线化，与已入座区分 */
+.seat-card.empty .avatar {
+  border-style: dashed;
+}
+
+/* 自己的座位：头像圈描金 */
+.seat-card.mine .avatar {
+  border-color: var(--gold);
+}
+
 /* 顶栏的房间名 */
 .room-title {
   font-size: 14px;
@@ -1138,9 +1224,31 @@ em.rose-count {
   cursor: help;
 }
 
-.loadout-chips .chip b {
-  color: var(--gold);
-  font-weight: 600;
+/* 槽位号画在小水晶里（SVG 见 artwork.tsx 的 CrystalHex），编号浮在宝石上 */
+.loadout-chips .chip .chip-hex {
+  position: relative;
+  flex: none;
+  width: 15px;
+  height: 16px;
+}
+
+.loadout-chips .chip-hex svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.loadout-chips .chip-hex b {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #241f1e;
+  font-size: 8.5px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 房主选中但尚未保存的技能组预览 */
@@ -1370,6 +1478,40 @@ em.rose {
   font-variant-numeric: tabular-nums;
 }
 
+/* 阵营色点：白蔷薇玫瑰白 / 暗刃血红 / 刃系（巨刃、双刃）钢蓝 / 其余金 */
+.dist .role-name::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  background: var(--gold);
+  vertical-align: 1px;
+}
+
+.dist tr[data-role='whiteRose'] .role-name::before {
+  background: var(--rose);
+}
+
+.dist tr[data-role='darkBlade'] .role-name::before {
+  background: var(--blood);
+}
+
+.dist tr[data-role='greatBlade'] .role-name::before,
+.dist tr[data-role='doubleBlade'] .role-name::before {
+  background: var(--blade);
+}
+
+/* 步进按钮圆形化 */
+.dist .stepper .btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 50%;
+  line-height: 1;
+}
+
 .warn {
   color: var(--gold);
   font-size: 13px;
@@ -1379,6 +1521,15 @@ em.rose {
 @media (max-width: 560px) {
   #root {
     padding: 10px 10px 40px;
+  }
+
+  .lobby-sec {
+    padding: 12px 10px;
+  }
+
+  .dist .stepper .btn {
+    width: 24px;
+    height: 24px;
   }
 
   h1 {
