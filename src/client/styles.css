@@ -490,9 +490,10 @@ em.rose-count {
 .table-scene {
   position: relative;
   width: 100%;
-  /* 16:9：桌心版图已移回独立全宽面板（2026-10-17 改版），席位环独占桌子，
-     不再需要为桌心版图拉高桌子。环内缩只服务席位卡本身。 */
-  aspect-ratio: 16 / 9;
+  /* 3:2：席位卡要在手牌/水晶行下方放「标注区」（用户要求：标注完整可见、
+     正常横向排布），卡片加高到 ~101px，桌子需要给环足够的竖向铺开空间——
+     桌心只有水印，拉高正好让「桌布」更舒展。 */
+  aspect-ratio: 3 / 2;
   margin: 4px 0 8px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -501,14 +502,13 @@ em.rose-count {
     var(--surface);
 }
 
-/* 环的坐标空间：固定内缩 垂直 46px / 水平 78px ≥ 席位卡半尺寸（32/66px）+ 眼睛角标外伸（8px）。
-   席位卡以坐标点为中心 translate(-50%,-50%)，而绝对定位子元素的包含块是 padding box
-   ——旧的「上下 0、左右 10%」救不了任何方向：6/8/10 人局 seatLayout 会给出 y=0 的
-   上中席位、8 人局还有 x=0/1 的正左右席位，卡片各有一半伸出牌桌矩形（实测反馈）。
-   卡片定宽 132px、高约 64px，固定像素在任何 ≥720px 视口下都能保证完整落在桌内。 */
+/* 环的坐标空间：固定内缩 垂直 66px / 水平 86px ≥ 席位卡半尺寸（高 101/2≈51、宽 74）
+   + 眼睛角标外伸（8px）+ 余量。席位卡以坐标点为中心 translate(-50%,-50%)，
+   绝对定位子元素的包含块是 padding box，padding 挡不住溢出——必须靠内缩。
+   卡片定尺寸（高含 2 行标注的预留），固定像素在任何 ≥720px 视口都保证落在桌内。 */
 .table-ring {
   position: absolute;
-  inset: 46px 78px;
+  inset: 66px 86px;
 }
 
 /* ══ 桌心：纹章水印（2026-10-17 改版）══
@@ -546,19 +546,22 @@ em.rose-count {
   z-index: 2;
 }
 
-/* 环上把「行」改排成小卡：座位号 + 头像 + 昵称在上，手牌 / 水晶 / 标签在下
-   （紧凑列表模式不受影响：网格只在这个场景容器内生效） */
+/* 环上把「行」改排成小卡：座位号 + 头像 + 昵称在上，手牌 / 水晶居中，
+   标注独占下方整行（用户要求：标注正常横向排布、完整可见，预留两行空间——
+   一般玩家标注 ≤3 个：行 1 容两个，第 3 个折行；≥4 个超出 3 行封顶隐藏）。
+   紧凑列表模式不受影响：网格只在这个场景容器内生效。 */
 .table-scene .player-row {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
   grid-template-areas:
     'seat avatar name'
-    'hand crystal tags';
+    'hand crystal .'
+    'tags tags tags';
   align-items: center;
-  gap: 4px 6px;
+  gap: 3px 6px;
   /* 固定宽度：否则卡片宽度随昵称 / 标签内容变化，环上看起来参差不齐 */
-  width: 132px;
-  padding: 6px 9px;
+  width: 148px;
+  padding: 5px 9px;
   border-radius: 10px;
 }
 
@@ -584,9 +587,19 @@ em.rose-count {
   grid-area: crystal;
 }
 
+/* 标注区：独占第三行、全宽换行排布；紧凑药丸（11px 字 + 1.3 行高 ≈ 18px/行），
+   高度随标注数自然增长（0–2 个一行、3 个两行、4+ 三行封顶——极端超出隐藏，
+   title 与紧凑列表兜底）。桌高按两行标注的卡（~106px）预算。 */
 .table-scene .player-row .tags {
   grid-area: tags;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  max-height: 64px;
+  overflow: hidden;
+}
+
+.table-scene .tag {
+  padding: 1px 5px;
+  line-height: 1.3;
 }
 
 /* 环上「（你）」由 .me 的描边色表达，省出一行宽度 */
@@ -787,39 +800,6 @@ em.rose-count {
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
-}
-
-/* ══ 环上席位卡的状态标注 ══
-   标注是独立 if 叠加，引擎语义下可同时挂 5 个（AI 托管 / 随机出牌 / 可殿后 /
-   行动绑定 / 已出牌）。基础视口（<832px）：单行截断防撑爆（见下方宽屏块的反证）；
-   高优标签（断线 / 托管）排在最前所以裁尾部，完整文字看 title（SeatCard 每个
-   tag 都补了 title），全量显示在紧凑列表模式。 */
-.table-scene .tags {
-  flex-wrap: nowrap;
-  justify-content: flex-start;
-  overflow: hidden;
-  max-height: 22px;
-}
-
-/* ══ 宽屏（视口 ≥832px）：席位卡加宽，状态标注预留两行 ══
-   用户反馈「2 个以上标注容纳不下、一般不超过 3 个」：卡宽 132 → 148 后
-   行 1 能放下任意两个标注（含两个四字），第 3 个折到行 2，不再截断；
-   卡高 63 → 87 仅在标注 ≥3 的席位出现。
-   几何模型（848 场景，inset 56/86）：5–10 人局 63/87 卡全干净（最大 0.8px 发丝擦碰）；
-   832 以下维持窄卡单行——148 宽卡在 9/10 人局会横向互叠 20–45px（模型实测）。 */
-@media (min-width: 832px) {
-  .table-ring {
-    inset: 56px 86px;
-  }
-
-  .table-scene .player-row {
-    width: 148px;
-  }
-
-  .table-scene .tags {
-    flex-wrap: wrap;
-    max-height: 48px;
-  }
 }
 
 .tag {
