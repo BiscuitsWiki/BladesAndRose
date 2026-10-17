@@ -33,6 +33,37 @@ const FACTION_LABEL: Record<Faction, string> = {
   bloodBlade: '血刃阵营',
 };
 
+/**
+ * 版图区内的 mini 卡行。
+ *
+ * `cap`（环绕模式）= 每区最多显示 2 张，超出折进「+N」徽标——版图区跨轮累积、不清空
+ * （setup 初始化一次用到底），不封顶时桌心会长到 ~394px 高，把席位卡全部压住（实测）。
+ * cap 曾取 4，但窄视口（scene≈625）下桌心侧栏只有 ~107px，4 张 28px 必然换行、桌心又长回
+ * ~306px；2 张（含「+N」徽标 ~80px）在任何 ≥720px 视口都严格单行。
+ * 关键公开信息是区名与 X/Y 计数（仍在 h3 上），最近一轮的完整牌面在「上一轮公开」，
+ * 被折起的牌在紧凑列表模式全量可见。
+ * 紧凑列表模式（cap=false）版图是独立面板，宽度充裕，全量显示。
+ */
+const ZONE_CAP = 2;
+
+export function ZoneChips({ cards, cap = false }: { cards: Card[]; cap?: boolean }) {
+  const shown = cap ? cards.slice(0, ZONE_CAP) : cards;
+  return (
+    <div className="chips">
+      {shown.length === 0 ? (
+        <span className="dim">空</span>
+      ) : (
+        shown.map((c) => <CardFace key={c.id} card={c} size="mini" title={cardLabel(c)} />)
+      )}
+      {cap && cards.length > ZONE_CAP && (
+        <span className="chips-more" title={`该区共 ${cards.length} 张，未显示 ${cards.length - ZONE_CAP} 张`}>
+          +{cards.length - ZONE_CAP}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** 半透明「闭眼」标记：闭眼/睁眼图标本体在 artwork.tsx（与大厅装饰资源同库管理） */
 
 /**
@@ -299,7 +330,7 @@ export function Board({
    * 桌心版图（步骤 4 · A4）：三栏（献祭区 / 弃牌区 / 血刃区）+ 花苞计数。
    * 环绕模式下由 TableScene 排进桌心，紧凑列表模式下退回独立「版图」面板。
    */
-  function renderBoard() {
+  function renderBoard(cap: boolean) {
     return (
       <div className="board-grid">
         <div className="board-col">
@@ -311,15 +342,7 @@ export function Board({
                 ✿ {G.zones.whiteRose.length}/{G.cardTotals.whiteRose}
               </em>
             </h3>
-            <div className="chips">
-              {G.zones.whiteRose.length === 0 ? (
-                <span className="dim">空</span>
-              ) : (
-                G.zones.whiteRose.map((c) => (
-                  <CardFace key={c.id} card={c} size="mini" title={cardLabel(c)} />
-                ))
-              )}
-            </div>
+            <ZoneChips cards={G.zones.whiteRose} cap={cap} />
           </div>
           <div className="zone">
             <h3>
@@ -328,15 +351,7 @@ export function Board({
                 <BudMark /> {G.sacrificeBuds}/{G.thresholds.sacrifice}
               </em>
             </h3>
-            <div className="chips">
-              {G.zones.sacrifice.length === 0 ? (
-                <span className="dim">空</span>
-              ) : (
-                G.zones.sacrifice.map((c) => (
-                  <CardFace key={c.id} card={c} size="mini" title={cardLabel(c)} />
-                ))
-              )}
-            </div>
+            <ZoneChips cards={G.zones.sacrifice} cap={cap} />
           </div>
         </div>
         <div className="board-col">
@@ -353,15 +368,7 @@ export function Board({
             <h3>
               血刃 <em className="blade">⚔ {G.zones.blade.length}/{G.cardTotals.blade}</em>
             </h3>
-            <div className="chips">
-              {G.zones.blade.length === 0 ? (
-                <span className="dim">空</span>
-              ) : (
-                G.zones.blade.map((c) => (
-                  <CardFace key={c.id} card={c} size="mini" title={cardLabel(c)} />
-                ))
-              )}
-            </div>
+            <ZoneChips cards={G.zones.blade} cap={cap} />
           </div>
           <div className="zone">
             <h3>
@@ -370,13 +377,7 @@ export function Board({
                 <BudMark dead /> {G.deathBuds}/{G.thresholds.death}
               </em>
             </h3>
-            <div className="chips">
-              {G.zones.death.length === 0 ? (
-                <span className="dim">空</span>
-              ) : (
-                G.zones.death.map((c) => <CardFace key={c.id} card={c} size="mini" />)
-              )}
-            </div>
+            <ZoneChips cards={G.zones.death} cap={cap} />
           </div>
         </div>
       </div>
@@ -607,7 +608,7 @@ export function Board({
           {compactSeats ? '环绕席位' : '紧凑列表'}
         </button>
       </div>
-      <TableScene compact={compactSeats} center={renderBoard()}>
+      <TableScene compact={compactSeats} center={renderBoard(!compactSeats)}>
         {renderSeatCards()}
       </TableScene>
       {renderActions()}

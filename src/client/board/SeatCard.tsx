@@ -102,7 +102,11 @@ export function SeatCard({
               </em>
             )}
             {visual.tokens.map((token) => (
-              <em key={token.text} className={`tag${token.gray ? ' gray' : ''}`}>
+              <em
+                key={token.text}
+                className={`tag${token.gray ? ' gray' : ''}`}
+                title={token.text}
+              >
                 {token.text}
               </em>
             ))}

@@ -810,6 +810,25 @@ em.rose-count {
   flex-wrap: wrap;
 }
 
+/* ══ 环上席位卡的状态标签限一行 ══
+   标签是独立 if 叠加，引擎语义下可同时挂 5 个（AI 托管 / 随机出牌 / 可殿后 /
+   行动绑定 / 已出牌）——换行会把卡片撑到 ~171px（8 个极端 278px），出界并互叠（实测）。
+   环上限一行 + 截断：高优标签（断线 / 托管）排在最前所以裁尾部，完整文字看 title
+   （SeatCard 已给每个 tag 补 title），全量显示在紧凑列表模式。 */
+.table-scene .tags {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  overflow: hidden;
+  max-height: 22px;
+}
+
+/* 桌心版图区被「+N」折叠的余量徽标（ZoneChips 的 cap 模式） */
+.chips-more {
+  align-self: center;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .tag {
   font-style: normal;
   font-size: 11px;
