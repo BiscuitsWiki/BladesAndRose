@@ -11,7 +11,7 @@ import {
 } from '../../engine';
 import { canRandomPlay, canResolveRedraw, handActions } from '../boardActions';
 import { COIN_FLIGHT_MS, CRYSTAL_PULSE_MS, TURN_PULSE_MS, planAnims, type AnimSnapshot } from '../anims';
-import { BudMark, ClosedEyeMark, CrystalHex, OpenEyeMark } from '../artwork';
+import { BudMark, ClosedEyeMark, CrystalHex, HallEmblem, OpenEyeMark } from '../artwork';
 import { CardFace, cardLabel } from '../cards';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
@@ -34,37 +34,30 @@ const FACTION_LABEL: Record<Faction, string> = {
 };
 
 /**
- * 版图区内的 mini 卡行。
- *
- * `cap`（环绕模式）= 每区最多显示 2 张，超出折进「+N」徽标——版图区跨轮累积、不清空
- * （setup 初始化一次用到底），不封顶时桌心会长到 ~394px 高，把席位卡全部压住（实测）。
- * cap 曾取 4，但窄视口（scene≈625）下桌心侧栏只有 ~107px，4 张 28px 必然换行、桌心又长回
- * ~306px；2 张（含「+N」徽标 ~80px）在任何 ≥720px 视口都严格单行。
- * 关键公开信息是区名与 X/Y 计数（仍在 h3 上），最近一轮的完整牌面在「上一轮公开」，
- * 被折起的牌在紧凑列表模式全量可见。
- * 紧凑列表模式（cap=false）版图是独立面板，宽度充裕，全量显示。
+ * 版图区内的 mini 卡行（44×66 带卡名）。
+ * 版图已移回全宽独立面板（桌心只留纹章水印），侧栏宽度充裕，全量显示、无需 cap——
+ * 曾经的 cap / 「+N」徽标随桌心版图一起移除（历史见 PROGRESS §3 的压测记录）。
  */
-const ZONE_CAP = 2;
-
-export function ZoneChips({ cards, cap = false }: { cards: Card[]; cap?: boolean }) {
-  const shown = cap ? cards.slice(0, ZONE_CAP) : cards;
+export function ZoneChips({ cards }: { cards: Card[] }) {
   return (
     <div className="chips">
-      {shown.length === 0 ? (
+      {cards.length === 0 ? (
         <span className="dim">空</span>
       ) : (
-        shown.map((c) => <CardFace key={c.id} card={c} size="mini" title={cardLabel(c)} />)
-      )}
-      {cap && cards.length > ZONE_CAP && (
-        <span className="chips-more" title={`该区共 ${cards.length} 张，未显示 ${cards.length - ZONE_CAP} 张`}>
-          +{cards.length - ZONE_CAP}
-        </span>
+        cards.map((c) => <CardFace key={c.id} card={c} size="mini" title={cardLabel(c)} />)
       )}
     </div>
   );
 }
 
 /** 半透明「闭眼」标记：闭眼/睁眼图标本体在 artwork.tsx（与大厅装饰资源同库管理） */
+
+/** 环绕模式的桌心：低透明度纹章水印（版图已移回独立面板，桌心只撑场景感） */
+const TABLE_WATERMARK = (
+  <div className="table-watermark" aria-hidden="true">
+    <HallEmblem />
+  </div>
+);
 
 /**
  * 传币动画：硬币从上一位持币者的玩家行飞向新持币者的玩家行。
@@ -327,10 +320,10 @@ export function Board({
   const slotOf = (seat: string) => ringSlots.get(seat) ?? { id: seat, x: 0.5, y: 0.5, angle: 0 };
 
   /**
-   * 桌心版图（步骤 4 · A4）：三栏（献祭区 / 弃牌区 / 血刃区）+ 花苞计数。
-   * 环绕模式下由 TableScene 排进桌心，紧凑列表模式下退回独立「版图」面板。
+   * 桌心版图（2026-10-17 改版）：版图移回全宽独立面板（紧凑列表沿用同一渲染），
+   * 环绕模式的桌心只留纹章水印——不再受席位环的宽度约束。
    */
-  function renderBoard(cap: boolean) {
+  function renderBoard() {
     return (
       <div className="board-grid">
         <div className="board-col">
@@ -342,7 +335,7 @@ export function Board({
                 ✿ {G.zones.whiteRose.length}/{G.cardTotals.whiteRose}
               </em>
             </h3>
-            <ZoneChips cards={G.zones.whiteRose} cap={cap} />
+            <ZoneChips cards={G.zones.whiteRose} />
           </div>
           <div className="zone">
             <h3>
@@ -351,7 +344,7 @@ export function Board({
                 <BudMark /> {G.sacrificeBuds}/{G.thresholds.sacrifice}
               </em>
             </h3>
-            <ZoneChips cards={G.zones.sacrifice} cap={cap} />
+            <ZoneChips cards={G.zones.sacrifice} />
           </div>
         </div>
         <div className="board-col">
@@ -368,7 +361,7 @@ export function Board({
             <h3>
               血刃 <em className="blade">⚔ {G.zones.blade.length}/{G.cardTotals.blade}</em>
             </h3>
-            <ZoneChips cards={G.zones.blade} cap={cap} />
+            <ZoneChips cards={G.zones.blade} />
           </div>
           <div className="zone">
             <h3>
@@ -377,7 +370,7 @@ export function Board({
                 <BudMark dead /> {G.deathBuds}/{G.thresholds.death}
               </em>
             </h3>
-            <ZoneChips cards={G.zones.death} cap={cap} />
+            <ZoneChips cards={G.zones.death} />
           </div>
         </div>
       </div>
@@ -609,9 +602,15 @@ export function Board({
           {compactSeats ? '环绕席位' : '紧凑列表'}
         </button>
       </div>
-      <TableScene compact={compactSeats} center={renderBoard(!compactSeats)}>
+      <TableScene compact={compactSeats} center={compactSeats ? renderBoard() : TABLE_WATERMARK}>
         {renderSeatCards()}
       </TableScene>
+      {!compactSeats && (
+        <div className="panel">
+          <h2>版图</h2>
+          {renderBoard()}
+        </div>
+      )}
       {renderActions()}
 
       <div className={`panel progress${isMyTurn ? ' me' : ''}`}>

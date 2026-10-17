@@ -490,10 +490,9 @@ em.rose-count {
 .table-scene {
   position: relative;
   width: 100%;
-  /* 3:2 而非 16:9：席位卡内缩进桌后，斜对角席位与桌心版图要同时容下，
-     16:9 的竖向空间不够（实测反馈：靠中间的席位卡会压住桌心的公开牌区）。
-     3:2 下「上席带下沿 ↔ 下斜席上沿」的空档约 250px，足够放下桌心版图。 */
-  aspect-ratio: 3 / 2;
+  /* 16:9：桌心版图已移回独立全宽面板（2026-10-17 改版），席位环独占桌子，
+     不再需要为桌心版图拉高桌子。环内缩只服务席位卡本身。 */
+  aspect-ratio: 16 / 9;
   margin: 4px 0 8px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -512,64 +511,26 @@ em.rose-count {
   inset: 46px 78px;
 }
 
-/* ══ 桌心版图（步骤 4 · A4）：三栏版图收进桌面中央 ══
-   环绕模式下版图不再单独占一块面板，而是坐在席位环中间——自己是底部那张卡、对面在上方，
-   桌心正好落在中间的空档里，与桌面共同构成完整场景。尺寸按桌子的宽高比收紧。
-   宽度 47% 与上移量按几何扫描定出（seatLayout 单位圆坐标 × 环盒 × 132px 席位卡）：
-   53% 时 6/9 人局的左右席位（x≈0.07/0.93, y≈0.25）与 5/10 人局的斜席（y≈0.65）会压住
-   桌心两侧，窄桌（scene≈686–750）最重 68×75px；47% 后 ≥750 全通过，686 下只剩 ≤6px
-   的发丝擦边（720px 视口以下是紧凑列表兜底的领域）。 */
+/* ══ 桌心：纹章水印（2026-10-17 改版）══
+   桌心版图（A4）为塞进席位环付出了一整条代价链——桌子拉高到 3:2、桌心收窄到 47%、
+   mini 缩到 28×42 且无卡名、每区 cap 2 张 +「+N」、720–790 过渡带必然擦碰——实测观感
+   太紧凑。版图移回牌桌下方的全宽独立面板（44×66 带卡名、全量显示），桌心只留低透明度
+   纹章水印撑场景感。pointer-events 关掉，不拦截席位环的任何交互。 */
 .table-center {
   position: absolute;
   left: 50%;
-  top: 48%;
+  top: 50%;
   transform: translate(-50%, -50%);
-  width: min(47%, 420px);
   z-index: 1;
+  pointer-events: none;
 }
 
-/* 桌心 mini 卡改小（28×42，仅插画）：保留 44×66 卡名条会把版图撑到 ~251px 高，
-   超出上下席位带之间的空档（5 人局斜席上沿 ~398 − 8 人局上席下沿 ~147）。
-   区名与计数（X/Y）仍在 h3 上；卡的身份由插画辨认，悬停 title 有全名，
-   完整卡名在「上一轮公开」与紧凑列表里始终可见。 */
-.table-center .cardface.mini {
-  width: 28px;
-  height: 42px;
+.table-watermark {
+  opacity: 0.08;
 }
 
-.table-center .cardface.mini .cardface-name {
-  display: none;
-}
-
-.table-center .cardface.mini .cardface-corner {
-  width: 7px;
-}
-
-/* 桌心空间有限：压掉各区的最小高度与留白，保证三栏都落在桌心里 */
-.table-center .board-grid {
-  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
-  gap: 8px;
-}
-
-.table-center .zone {
-  min-height: 0;
-  padding: 7px 8px;
-}
-
-.table-center .zone h3 {
-  font-size: 11px;
-}
-
-.table-center .col-head {
-  margin-bottom: 6px;
-  padding-bottom: 4px;
-  font-size: 11px;
-}
-
-.table-center .chips {
-  /* 间距 2px：桌心收窄到 47% 后，7–10 人局的 4 张 mini（4×28 + 3×间距）在 ≈120px 的
-     侧栏里必须单行放下，否则换行会把版图撑高、重新撞上席位卡 */
-  gap: 2px;
+.table-watermark .hall-emblem {
+  width: min(300px, 52%);
 }
 
 /* 环上的席位：绝对定位到归一化坐标处（行内 left/top 由 Board 按 seatLayout 写入） */
@@ -832,13 +793,6 @@ em.rose-count {
   justify-content: flex-start;
   overflow: hidden;
   max-height: 22px;
-}
-
-/* 桌心版图区被「+N」折叠的余量徽标（ZoneChips 的 cap 模式） */
-.chips-more {
-  align-self: center;
-  font-size: 11px;
-  color: var(--muted);
 }
 
 .tag {
