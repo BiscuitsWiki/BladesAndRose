@@ -1,4 +1,5 @@
 import { type Card } from '../engine';
+import { RoseMark } from './artwork';
 import { cardFaceOf } from './scene';
 
 /** 卡牌的显示名（幽魂 / 信者 / 角色名）；映射本体在共享层 `scene.ts` 的 `cardFaceOf` */
@@ -66,6 +67,30 @@ export function CardFace({
         ))}
       </span>
       <span className="cardface-name">{cardLabel(card)}</span>
+    </span>
+  );
+}
+
+/**
+ * 卡背：手牌不可见时的占位（观战模式的自区）。
+ *
+ * 复用 `CardFace` 的卡框与四角饰花（同一套 `.cardface` 结构，尺寸变体共用），
+ * 中央换成程序绘制的白玫瑰水印，**不带卡名条**——空白的下半部正好与「未知牌」同义。
+ * 不引入任何位图资源（方案 §5.3 的「卡背」原本列的是待做位图，此处用程序画替代）。
+ */
+export function CardBack({ size = 'hand' }: { size?: 'mini' | 'hand' | 'reveal' | 'fill' }) {
+  return (
+    <span className={`cardface back ${size}`} aria-label="手牌（不可见）">
+      <span className="cardface-panel">
+        <span className="cardface-back-mark">
+          <RoseMark />
+        </span>
+        {CORNERS.map((position) => (
+          <span key={position} className={`cardface-corner ${position}`}>
+            <CornerOrnament />
+          </span>
+        ))}
+      </span>
     </span>
   );
 }

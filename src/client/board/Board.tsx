@@ -12,7 +12,7 @@ import {
 import { canRandomPlay, canResolveRedraw, handActions } from '../boardActions';
 import { COIN_FLIGHT_MS, CRYSTAL_PULSE_MS, TURN_PULSE_MS, planAnims, type AnimSnapshot } from '../anims';
 import { BudMark, ClosedEyeMark, CrystalHex, OpenEyeMark } from '../artwork';
-import { CardFace, cardLabel } from '../cards';
+import { CardBack, CardFace, cardLabel } from '../cards';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
 import { seatLayout, seatVisualOf, type SeatZone } from '../scene';
@@ -148,7 +148,7 @@ export function Board({
   /** 回合提醒：该脉冲的座位，null = 不播 */
   const [turnPulse, setTurnPulse] = useState<string | null>(null);
   /**
-   * 席位视图：默认竖版牌桌（三行环绕）；9–10 人局超出容量（顶 3 + 底 3 + 左右 2 = 8）
+   * 席位视图：默认牌桌（三行环绕）；9–10 人局超出容量（顶 3 + 左右各 2 + 底 1 = 8）
    * 时切紧凑列表（方案 §5.2 的兜底）。
    */
   const [compactSeats, setCompactSeats] = useState(() => G.players.length >= 9);
@@ -298,8 +298,8 @@ export function Board({
   );
 
   /**
-   * 席位分布（共享纯函数 `scene.seatLayout`）：竖版三行牌桌——自己恒在底行（6–7 人局
-   * 与下家同行、其余人数居中），其余按「自己起顺时针」填入 底行两侧 → 左翼 → 顶行（左→右） → 右翼。
+   * 席位分布（共享纯函数 `scene.seatLayout`）：自己恒独占底行（底行整块留给「自己 + 手牌空间」），
+   * 其余按「自己起顺时针」填入 左翼 → 顶行（左→右） → 右翼（7–8 人局两翼各 2 张、5–6 人局各 1 张）。
    * 「自己」的取值：观战视角聚焦的座位优先（观战切到某座位时桌也跟着转），
    * 否则就是本人的座位；都没有（观战全局）时按座位 1 处理。
    */
@@ -496,8 +496,11 @@ export function Board({
     return '';
   }
 
-  /** 操作按钮：出牌阶段的动作都在手牌区，牌桌下方只剩换牌阶段的「放弃换牌」 */
-  function renderActions() {
+  /**
+   * 阶段动作按钮：换牌阶段的「放弃换牌」、扩充技能「没有可选目标」时的确认。
+   * 它们只对本人出现，因此并入下方的手牌空间，按钮不再散落在牌桌与面板两处。
+   */
+  function renderPhaseActions() {
     // 扩充技能可能出现「没有可选目标」（如 5 号技能目标池为空）：确认后按空集合结算
     if (G.phase === 'magicTargets' && isMyTurn && (G.pendingMagic?.needTargets ?? 1) === 0) {
       return (
@@ -515,6 +518,135 @@ export function Board({
           放弃换牌
         </button>
       </div>
+    );
+  }
+
+  /**
+   * 观战占位：手牌不公开，按底行（聚焦座位）的公开手牌数渲染卡背（最多 4 张，更多折成「+N」）。
+   * 水晶同理不公开——席位卡只在「已放上版图」后才显示编号，这里不再另作处理。
+   */
+  function renderHandBacks() {
+    const bottomSeat = zoneSeats('bottom')[0];
+    const count = bottomSeat?.handCount ?? 0;
+    const shown = Math.min(count, 4);
+    return (
+      <div className="hand">
+        {Array.from({ length: shown }, (_, i) => (
+          <CardBack key={i} />
+        ))}
+        {count > shown && <span className="dim">+{count - shown}</span>}
+      </div>
+    );
+  }
+
+  /**
+   * 手牌空间（方案 §5.1：底行＝当前视角玩家独享）：身份行 + 技能说明 + 手牌卡面 + 操作按钮。
+   *
+   * 一份内容两处挂载：
+   *   - `withHeading = false`：牌桌底行自区的右侧（环绕席位模式的默认位置）；
+   *   - `withHeading = true`：紧凑列表兜底（9–10 人局 / 手动切换）下没有牌桌，
+   *     仍在原位以「你的手牌」面板呈现。
+   * 观战（`me` 为空）：面板形态整体不渲染（与原行为一致）；牌桌自区改用卡背占位。
+   */
+  function renderHandArea(withHeading: boolean) {
+    if (!me?.role) {
+      if (withHeading) return null;
+      return (
+        <div className="self-hand spectator">
+          {renderHandBacks()}
+          <p className="dim">观战视角 · 手牌与水晶不公开</p>
+        </div>
+      );
+    }
+
+    const body = (
+      <>
+        <p className="identity">
+          角色 <strong>{ROLE_LABEL[me.role]}</strong> · {FACTION_LABEL[me.faction!]} · 水晶{' '}
+          <strong>{me.crystal}</strong>
+        </p>
+        {mySkill && (
+          <p className="skill-note">
+            <strong>
+              水晶 {me.crystal} · {mySkill.name}
+            </strong>
+            <span className="dim">{mySkill.text}</span>
+          </p>
+        )}
+        <div className="hand">
+          {(me.hand ?? []).map((c) => {
+            const canHandAct =
+              G.phase === 'play' && isMyTurn && !G.modifiers.mustPass.includes(playerID ?? '');
+            // 3 号扩充：随机出牌轮不能选牌（牌由引擎抽）；9 号扩充：幽魂不可出
+            const ghostLocked = G.modifiers.noGhost && c.kind === 'ghost';
+            const playable = canHandAct && !G.modifiers.randomPlay && !ghostLocked;
+            return (
+              <button
+                key={c.id}
+                className={`card${pickedCardId === c.id ? ' selected' : ''}`}
+                disabled={!playable}
+                title={ghostLocked ? '本轮不能打出幽魂牌' : undefined}
+                onClick={() =>
+                  setPickedCardId((prev) => {
+                    if (prev === c.id) return prev;
+                    return c.id;
+                  })
+                }
+              >
+                <CardFace card={c} title={ghostLocked ? '本轮不能打出幽魂牌' : undefined} />
+              </button>
+            );
+          })}
+        </div>
+        {G.modifiers.bishopMustPlay && me.role === 'bishop' && (me.handCount ?? 0) > 0 && (
+          <p className="skill-note">
+            <span className="dim">本轮司教若持有手牌必须出牌（规则公开，身份不公开）</span>
+          </p>
+        )}
+        {handOps && (
+          <div className="actions">
+            {handOps.canGoLast && (
+              <button className="btn" onClick={() => moves.chooseGoLast()}>
+                我要最后行动
+              </button>
+            )}
+            {canRandomPlay(G, playerID) && (
+              <button className="btn primary" onClick={() => moves.playRandom()}>
+                随机出牌
+              </button>
+            )}
+            {handOps.canConfirm && (
+              <>
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    moves.playCard(pickedCardId!);
+                    setPickedCardId(null);
+                  }}
+                >
+                  {G.pendingRedraw === playerID ? '确认替换' : '确认出这张牌'}
+                </button>
+                <button className="btn" onClick={() => setPickedCardId(null)}>
+                  取消
+                </button>
+              </>
+            )}
+            <button className="btn" disabled={!handOps.canSkip} onClick={() => moves.passTurn()}>
+              跳过
+            </button>
+          </div>
+        )}
+        {renderPhaseActions()}
+      </>
+    );
+
+    return withHeading ? (
+      <div className="panel">
+        <h2>你的手牌</h2>
+        {body}
+      </div>
+    ) : (
+      <div className="self-hand">{body}</div>
     );
   }
 
@@ -594,7 +726,7 @@ export function Board({
             ))}
           </span>
         )}
-        {/* 兜底视图：9–10 人局超出竖版牌桌容量时切回改造前的竖排列表（方案 §5.2） */}
+        {/* 兜底视图：9–10 人局超出牌桌容量时切回改造前的竖排列表（方案 §5.2） */}
         <button className="btn small" onClick={() => setCompactSeats((prev) => !prev)}>
           {compactSeats ? '环绕席位' : '紧凑列表'}
         </button>
@@ -602,14 +734,19 @@ export function Board({
       {compactSeats ? (
         <div className="players">{G.players.map((p) => renderSeatCard(p))}</div>
       ) : (
+        /* 底行 = 当前视角玩家独享：左＝自己的席位卡，右＝手牌空间（含阶段动作按钮） */
         <TableScene
           top={<>{zoneSeats('top').map((p) => renderSeatCard(p))}</>}
           left={<>{zoneSeats('left').map((p) => renderSeatCard(p))}</>}
           right={<>{zoneSeats('right').map((p) => renderSeatCard(p))}</>}
-          bottom={<>{zoneSeats('bottom').map((p) => renderSeatCard(p))}</>}
+          bottom={
+            <>
+              <div className="self-seat">{zoneSeats('bottom').map((p) => renderSeatCard(p))}</div>
+              {renderHandArea(false)}
+            </>
+          }
         />
       )}
-      {renderActions()}
 
       <div className={`panel progress${isMyTurn ? ' me' : ''}`}>
         <div className="panel-head">
@@ -705,86 +842,8 @@ export function Board({
         </div>
       )}
 
-      {me?.role && (
-        <div className="panel">
-          <h2>你的手牌</h2>
-          <p className="identity">
-            角色 <strong>{ROLE_LABEL[me.role]}</strong> · {FACTION_LABEL[me.faction!]} · 水晶{' '}
-            <strong>{me.crystal}</strong>
-          </p>
-          {mySkill && (
-            <p className="skill-note">
-              <strong>
-                水晶 {me.crystal} · {mySkill.name}
-              </strong>
-              <span className="dim">{mySkill.text}</span>
-            </p>
-          )}
-          <div className="hand">
-            {(me.hand ?? []).map((c) => {
-              const canHandAct =
-                G.phase === 'play' && isMyTurn && !G.modifiers.mustPass.includes(playerID ?? '');
-              // 3 号扩充：随机出牌轮不能选牌（牌由引擎抽）；9 号扩充：幽魂不可出
-              const ghostLocked = G.modifiers.noGhost && c.kind === 'ghost';
-              const playable = canHandAct && !G.modifiers.randomPlay && !ghostLocked;
-              return (
-                <button
-                  key={c.id}
-                  className={`card${pickedCardId === c.id ? ' selected' : ''}`}
-                  disabled={!playable}
-                  title={ghostLocked ? '本轮不能打出幽魂牌' : undefined}
-                  onClick={() =>
-                    setPickedCardId((prev) => {
-                      if (prev === c.id) return prev;
-                      return c.id;
-                    })
-                  }
-                >
-                  <CardFace card={c} title={ghostLocked ? '本轮不能打出幽魂牌' : undefined} />
-                </button>
-              );
-            })}
-          </div>
-          {G.modifiers.bishopMustPlay && me.role === 'bishop' && (me.handCount ?? 0) > 0 && (
-            <p className="skill-note">
-              <span className="dim">本轮司教若持有手牌必须出牌（规则公开，身份不公开）</span>
-            </p>
-          )}
-          {handOps && (
-            <div className="actions">
-              {handOps.canGoLast && (
-                <button className="btn" onClick={() => moves.chooseGoLast()}>
-                  我要最后行动
-                </button>
-              )}
-              {canRandomPlay(G, playerID) && (
-                <button className="btn primary" onClick={() => moves.playRandom()}>
-                  随机出牌
-                </button>
-              )}
-              {handOps.canConfirm && (
-                <>
-                  <button
-                    className="btn primary"
-                    onClick={() => {
-                      moves.playCard(pickedCardId!);
-                      setPickedCardId(null);
-                    }}
-                  >
-                    {G.pendingRedraw === playerID ? '确认替换' : '确认出这张牌'}
-                  </button>
-                  <button className="btn" onClick={() => setPickedCardId(null)}>
-                    取消
-                  </button>
-                </>
-              )}
-              <button className="btn" disabled={!handOps.canSkip} onClick={() => moves.passTurn()}>
-                跳过
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+      {/* 环绕席位模式下，手牌空间在牌桌下方的自区面板里（`.self-hand`）；这里只兜底紧凑列表模式 */}
+      {compactSeats && renderHandArea(true)}
 
       {renderKnowledge()}
 

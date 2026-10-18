@@ -30,66 +30,63 @@ function deepFreeze<T>(value: T): T {
 }
 
 describe('席位分布（seatLayout）——竖版三行牌桌', () => {
-  it('5–10 人 × 每个视角：长度正确、座位号唯一、自己恒在底行（5 人独占、6–7 人与下家同行）', () => {
+  it('5–10 人 × 每个视角：长度正确、座位号唯一、自己恒独占底行', () => {
     for (const count of COUNTS) {
       for (let self = 0; self < count; self++) {
         const slots = seatLayout(self, count);
         expect(slots).toHaveLength(count);
         expect(new Set(slots.map((slot) => slot.id)).size).toBe(count);
-        expect(slots[0]).toEqual({
-          id: String(self),
-          zone: 'bottom',
-          col: count <= 5 ? 0 : 1,
-          rowSize: count <= 5 ? 1 : count <= 7 ? 2 : 3,
-        });
+        expect(slots[0]).toEqual({ id: String(self), zone: 'bottom', col: 0, rowSize: 1 });
       }
     }
   });
 
-  it('分布形态：5 人 底1顶2、6 人 底2顶2、7 人 底2顶3、8 人 底3顶3（底行不多于顶行），左右恒各 1', () => {
+  it('分布形态：5 人 顶2、6 人 顶3、7 人 顶2、8 人 顶3；左右各 1（5–6 人）或各 2（7–8 人）；底行恒 1', () => {
     const zoneSizes = (count: number) => {
       const slots = seatLayout(0, count);
       const size = (zone: string) => slots.filter((slot) => slot.zone === zone).length;
       return { top: size('top'), left: size('left'), right: size('right'), bottom: size('bottom') };
     };
     expect(zoneSizes(5)).toEqual({ top: 2, left: 1, right: 1, bottom: 1 });
-    expect(zoneSizes(6)).toEqual({ top: 2, left: 1, right: 1, bottom: 2 });
-    expect(zoneSizes(7)).toEqual({ top: 3, left: 1, right: 1, bottom: 2 });
-    expect(zoneSizes(8)).toEqual({ top: 3, left: 1, right: 1, bottom: 3 });
+    expect(zoneSizes(6)).toEqual({ top: 3, left: 1, right: 1, bottom: 1 });
+    expect(zoneSizes(7)).toEqual({ top: 2, left: 2, right: 2, bottom: 1 });
+    expect(zoneSizes(8)).toEqual({ top: 3, left: 2, right: 2, bottom: 1 });
   });
 
-  it('顺时针序：下家贴身（底左或左翼）、上家在另一侧，顶行从左到右', () => {
-    // 8 人：k1=底左、k2=左翼、k3–k5=顶行、k6=右翼、k7=底右
+  it('顺时针序：左翼（下→上）→ 顶行（左→右）→ 右翼（上→下），下家/上家贴身', () => {
+    // 8 人：k1–k2=左翼、k3–k5=顶行、k6–k7=右翼（k7 = 上家，落右翼末位、贴向自己）
     const eight = seatLayout(0, 8);
     expect(eight.slice(1).map((slot) => `${slot.zone}:${slot.col}`)).toEqual([
-      'bottom:0',
       'left:0',
+      'left:1',
       'top:0',
       'top:1',
       'top:2',
       'right:0',
-      'bottom:2',
+      'right:1',
     ]);
-    // 7 人：底行 = 下家 + 自己，上家落到右翼，顶行 3 席
+    expect(eight[1]!.id).toBe('1'); // 下家在左翼 col 0（贴向底行的自己）
+    expect(eight[7]!.id).toBe('7'); // 上家在右翼 col 1（贴向底行的自己）
+    // 7 人：左右各 2、顶行 2 席
     const seven = seatLayout(0, 7);
     expect(seven.slice(1).map((slot) => `${slot.zone}:${slot.col}`)).toEqual([
-      'bottom:0',
+      'left:0',
+      'left:1',
+      'top:0',
+      'top:1',
+      'right:0',
+      'right:1',
+    ]);
+    // 6 人：左右各 1、顶行 3 席（上家落右翼）
+    const six = seatLayout(0, 6);
+    expect(six.slice(1).map((slot) => `${slot.zone}:${slot.col}`)).toEqual([
       'left:0',
       'top:0',
       'top:1',
       'top:2',
       'right:0',
     ]);
-    // 6 人：底行 = 下家 + 自己，上家落到右翼
-    const six = seatLayout(0, 6);
-    expect(six.slice(1).map((slot) => `${slot.zone}:${slot.col}`)).toEqual([
-      'bottom:0',
-      'left:0',
-      'top:0',
-      'top:1',
-      'right:0',
-    ]);
-    // 5 人没有底行补位：下家直接落在左翼
+    // 5 人：左右各 1、顶行 2 席（下家直接落在左翼）
     const five = seatLayout(0, 5);
     expect(five.slice(1).map((slot) => `${slot.zone}:${slot.col}`)).toEqual([
       'left:0',
@@ -99,7 +96,7 @@ describe('席位分布（seatLayout）——竖版三行牌桌', () => {
     ]);
   });
 
-  it('段内 col 与 rowSize 自洽（顶/底行横排、左右各 1）', () => {
+  it('段内 col 与 rowSize 自洽（顶行横排、左右翼纵排、底行恒 1）', () => {
     for (const count of COUNTS) {
       for (const zone of ['top', 'left', 'right', 'bottom'] as const) {
         const inZone = seatLayout(0, count).filter((slot) => slot.zone === zone);
@@ -132,12 +129,12 @@ describe('席位分布（seatLayout）——竖版三行牌桌', () => {
     expect(seatLayout(0, 4.5)).toEqual([]);
   });
 
-  it('9–10 人：形态规则依旧成立（超出容量，端上据此切紧凑列表兜底）', () => {
+  it('9–10 人：形态规则依旧成立（左右各 2、底 1，顶行溢出；端上据此切紧凑列表兜底）', () => {
     for (const count of [9, 10]) {
       const slots = seatLayout(0, count);
-      expect(slots.filter((slot) => slot.zone === 'bottom')).toHaveLength(3);
-      expect(slots.filter((slot) => slot.zone === 'left')).toHaveLength(1);
-      expect(slots.filter((slot) => slot.zone === 'right')).toHaveLength(1);
+      expect(slots.filter((slot) => slot.zone === 'bottom')).toHaveLength(1);
+      expect(slots.filter((slot) => slot.zone === 'left')).toHaveLength(2);
+      expect(slots.filter((slot) => slot.zone === 'right')).toHaveLength(2);
       expect(slots.filter((slot) => slot.zone === 'top')).toHaveLength(count - 5);
     }
   });

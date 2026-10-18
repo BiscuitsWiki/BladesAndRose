@@ -222,3 +222,33 @@ export function HallEmblem() {
     </svg>
   );
 }
+
+/**
+ * 白玫瑰纹样（正方形）：卡背的中央水印。
+ * 就是 `HallEmblem` 中央那朵「五瓣外轮 + 内圈 + 金色花心」，换成正方形 viewBox 以便等比铺进卡面；
+ * 线条用 `currentColor`，由 CSS 控色与透明度（卡背只作占位，不宜抢眼）。
+ */
+export function RoseMark() {
+  return (
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <g
+        transform="translate(32 32)"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        fill="none"
+        strokeLinejoin="round"
+      >
+        {Array.from({ length: 5 }, (_, i) => (
+          <path
+            key={i}
+            transform={`rotate(${i * 72})`}
+            d="M0 -24 C9.3 -20.1 11.1 -8.4 0 -3.1 C-11.1 -8.4 -9.3 -20.1 0 -24 Z"
+          />
+        ))}
+        <circle r="10.2" />
+        <path d="M0 -9.8 C5.3 -6.2 5.3 2.7 0 6.2 C-5.3 2.7 -5.3 -6.2 0 -9.8 Z" />
+        <circle r="2.7" fill="currentColor" stroke="none" />
+      </g>
+    </svg>
+  );
+}
