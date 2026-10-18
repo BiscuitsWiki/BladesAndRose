@@ -14,7 +14,7 @@
 | 部署方式 | 上传源码 → `sudo docker compose -p bar up -d --build` |
 | 更新步骤 | ① `tar -czf` 打包 `src/ public/ Dockerfile .dockerignore package.json package-lock.json tsconfig.json vite.config.ts index.html`（`docs/` 与 `*.md` 被 `.dockerignore` 排除，不进镜像）→ ② `scp` 上传 → ③ 服务器 `sudo tar -xzf` 解包到 `/opt/bar` → ④ 先 `sudo docker tag blades-and-rose:latest blades-and-rose:prev` 留回滚点 → ⑤ `sudo docker compose -p bar up -d --build`。**`Dockerfile` 必须在打包清单里**：`public/` 进镜像靠它的 `COPY public ./public`，漏传就会「前端新代码已上线、但卡面全部 404」（2026-10-15 实际踩到过：只打包 `public/` 而没带 `Dockerfile`，服务器上的旧 Dockerfile 里没有这行） |
 | 回滚 | `sudo docker tag blades-and-rose:prev blades-and-rose:latest && sudo docker compose -p bar up -d`（源码可另从 GitHub `main` 取） |
-| 当前版本 | GitHub `main` 提交 `b82e4e2`（2026-10-17 **第三次**部署：本日 UI 大版本——大厅插画风改版、版图独立面板 + 桌心水印、席位卡标注区重排、行动者绿光晕等）。回滚点 `blades-and-rose:prev` = 第二次部署的 `f098435` |
+| 当前版本 | GitHub `main` 提交 `ad21e45`（2026-10-18 **第四次**部署：席位卡改 3:4 竖版、牌桌纵向三行布局——顶行 / 左右翼 / 底行，底行席位数不超过顶行，9–10 人局兜底紧凑列表）。回滚点 `blades-and-rose:prev` = 第三次部署的 `b82e4e2` |
 | 限流 | 进程内按 IP 固定窗口（游客发号 20/分、注册 10/分、建房 20/分、座位认领 60/分、房间操作 60/分、房间信息 300/分），超限 429 |
 | SSH 登录 | 允许密码登录（2026-10-10 已回滚"仅密钥"加固：`00-hardening.conf` 已删除，配置回到原状）；`/etc/ssh/` 下的 `*.bak-hardening-20261009` 为当时备份，可随时清理。**2026-10-17 起本机 `id_ed25519` 公钥已加入 ubuntu 的 authorized_keys（免密部署），私钥只存本机** |
 | SSH 防爆破 | fail2ban（2026-10-10 安装，已设为开机自启）：sshd jail，10 分钟内失败 5 次封禁 6 小时，重复封禁时长翻倍（上限 1 周）；后端用 polling 读 `/var/log/auth.log`（Ubuntu 24.04 SSH 为 socket 激活，systemd 后端匹配不到日志）；配置在 `/etc/fail2ban/jail.d/bar-ssh.local`；查看 `sudo fail2ban-client status sshd`，解封 `sudo fail2ban-client set sshd unbanip <IP>` |
