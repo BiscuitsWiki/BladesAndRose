@@ -29,40 +29,86 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
-describe('席位环布局（seatLayout）', () => {
-  it('5–10 人 × 每个视角：长度正确、座位号唯一、自己恒在底部居中', () => {
+describe('席位分布（seatLayout）——竖版三行牌桌', () => {
+  it('5–10 人 × 每个视角：长度正确、座位号唯一、自己恒在底行（5 人独占、6–7 人与下家同行）', () => {
     for (const count of COUNTS) {
       for (let self = 0; self < count; self++) {
         const slots = seatLayout(self, count);
         expect(slots).toHaveLength(count);
         expect(new Set(slots.map((slot) => slot.id)).size).toBe(count);
-        expect(slots[0]).toEqual({ id: String(self), x: 0.5, y: 1, angle: 0 });
+        expect(slots[0]).toEqual({
+          id: String(self),
+          zone: 'bottom',
+          col: count <= 5 ? 0 : 1,
+          rowSize: count <= 5 ? 1 : count <= 7 ? 2 : 3,
+        });
       }
     }
   });
 
-  it('自己在下、下家在左下、对面在正上方（偶数局）', () => {
-    const five = seatLayout(0, 5);
-    expect(five[1]!.x).toBeLessThan(0.5);
-    expect(five[1]!.y).toBeGreaterThan(0.5);
-    // 顺时针为正：下家的朝向角为正、对面为 180
-    expect(five[1]!.angle).toBeGreaterThan(0);
-    expect(five[4]!.x).toBeGreaterThan(0.5);
-
-    const six = seatLayout(0, 6);
-    expect(six[3]!.x).toBeCloseTo(0.5, 6);
-    expect(six[3]!.y).toBeCloseTo(0, 6);
-    expect(six[3]!.angle).toBeCloseTo(180, 6);
+  it('分布形态：5 人 底1顶2、6 人 底2顶2、7 人 底2顶3、8 人 底3顶3（底行不多于顶行），左右恒各 1', () => {
+    const zoneSizes = (count: number) => {
+      const slots = seatLayout(0, count);
+      const size = (zone: string) => slots.filter((slot) => slot.zone === zone).length;
+      return { top: size('top'), left: size('left'), right: size('right'), bottom: size('bottom') };
+    };
+    expect(zoneSizes(5)).toEqual({ top: 2, left: 1, right: 1, bottom: 1 });
+    expect(zoneSizes(6)).toEqual({ top: 2, left: 1, right: 1, bottom: 2 });
+    expect(zoneSizes(7)).toEqual({ top: 3, left: 1, right: 1, bottom: 2 });
+    expect(zoneSizes(8)).toEqual({ top: 3, left: 1, right: 1, bottom: 3 });
   });
 
-  it('所有点都落在 0–1 内、且位于半径 0.5 的圆上（椭圆化交给各端容器）', () => {
+  it('顺时针序：下家贴身（底左或左翼）、上家在另一侧，顶行从左到右', () => {
+    // 8 人：k1=底左、k2=左翼、k3–k5=顶行、k6=右翼、k7=底右
+    const eight = seatLayout(0, 8);
+    expect(eight.slice(1).map((slot) => `${slot.zone}:${slot.col}`)).toEqual([
+      'bottom:0',
+      'left:0',
+      'top:0',
+      'top:1',
+      'top:2',
+      'right:0',
+      'bottom:2',
+    ]);
+    // 7 人：底行 = 下家 + 自己，上家落到右翼，顶行 3 席
+    const seven = seatLayout(0, 7);
+    expect(seven.slice(1).map((slot) => `${slot.zone}:${slot.col}`)).toEqual([
+      'bottom:0',
+      'left:0',
+      'top:0',
+      'top:1',
+      'top:2',
+      'right:0',
+    ]);
+    // 6 人：底行 = 下家 + 自己，上家落到右翼
+    const six = seatLayout(0, 6);
+    expect(six.slice(1).map((slot) => `${slot.zone}:${slot.col}`)).toEqual([
+      'bottom:0',
+      'left:0',
+      'top:0',
+      'top:1',
+      'right:0',
+    ]);
+    // 5 人没有底行补位：下家直接落在左翼
+    const five = seatLayout(0, 5);
+    expect(five.slice(1).map((slot) => `${slot.zone}:${slot.col}`)).toEqual([
+      'left:0',
+      'top:0',
+      'top:1',
+      'right:0',
+    ]);
+  });
+
+  it('段内 col 与 rowSize 自洽（顶/底行横排、左右各 1）', () => {
     for (const count of COUNTS) {
-      for (const slot of seatLayout(0, count)) {
-        expect(slot.x).toBeGreaterThanOrEqual(0);
-        expect(slot.x).toBeLessThanOrEqual(1);
-        expect(slot.y).toBeGreaterThanOrEqual(0);
-        expect(slot.y).toBeLessThanOrEqual(1);
-        expect((slot.x - 0.5) ** 2 + (slot.y - 0.5) ** 2).toBeCloseTo(0.25, 5);
+      for (const zone of ['top', 'left', 'right', 'bottom'] as const) {
+        const inZone = seatLayout(0, count).filter((slot) => slot.zone === zone);
+        expect(new Set(inZone.map((slot) => slot.col)).size).toBe(inZone.length);
+        for (const slot of inZone) {
+          expect(slot.rowSize).toBe(inZone.length);
+          expect(slot.col).toBeGreaterThanOrEqual(0);
+          expect(slot.col).toBeLessThan(inZone.length);
+        }
       }
     }
   });
@@ -84,6 +130,16 @@ describe('席位环布局（seatLayout）', () => {
     expect(seatLayout(0, 0)).toEqual([]);
     expect(seatLayout(0, -3)).toEqual([]);
     expect(seatLayout(0, 4.5)).toEqual([]);
+  });
+
+  it('9–10 人：形态规则依旧成立（超出容量，端上据此切紧凑列表兜底）', () => {
+    for (const count of [9, 10]) {
+      const slots = seatLayout(0, count);
+      expect(slots.filter((slot) => slot.zone === 'bottom')).toHaveLength(3);
+      expect(slots.filter((slot) => slot.zone === 'left')).toHaveLength(1);
+      expect(slots.filter((slot) => slot.zone === 'right')).toHaveLength(1);
+      expect(slots.filter((slot) => slot.zone === 'top')).toHaveLength(count - 5);
+    }
   });
 
   it('纯函数：重复调用结果一致', () => {

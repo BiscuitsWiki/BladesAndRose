@@ -483,17 +483,17 @@ em.rose-count {
   margin-right: 4px;
 }
 
-/* ══ 牌桌场景（步骤 4 · A2）：桌面 + 席位环绕 ══
-   席位坐标来自共享纯函数 scene.ts 的 seatLayout（归一化 0–1，自己恒在底部居中）
-   ——这里只负责「容器宽高比 → 椭圆」与环上席位卡的紧凑排布；
-   紧凑列表模式（.players）保持改造前原样。 */
+/* ══ 牌桌场景（2026-10-18 竖版改版）：三行席位 + 桌心纹章水印 ══
+   席位分布来自共享纯函数 scene.ts 的 seatLayout（zone/col：自己恒在底行——6–7 人局
+   与下家同行、其余人数居中，其余按「自己起顺时针」填入 底行两侧 / 左右两翼 / 顶行）
+   ——这里只负责把各分区横排居中。
+   席位卡为 3:4 竖版卡（宽度随视口收缩，手机上不再互相挤压），桌面纵向拉长；
+   紧凑列表兜底（.players）保持改造前原样。 */
 .table-scene {
-  position: relative;
-  width: 100%;
-  /* 3:2：席位卡要在手牌/水晶行下方放「标注区」（用户要求：标注完整可见、
-     正常横向排布），卡片加高到 ~101px，桌子需要给环足够的竖向铺开空间——
-     桌心只有水印，拉高正好让「桌布」更舒展。 */
-  aspect-ratio: 3 / 2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
   margin: 4px 0 8px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -502,24 +502,26 @@ em.rose-count {
     var(--surface);
 }
 
-/* 环的坐标空间：固定内缩 垂直 66px / 水平 86px ≥ 席位卡半尺寸（高 101/2≈51、宽 74）
-   + 眼睛角标外伸（8px）+ 余量。席位卡以坐标点为中心 translate(-50%,-50%)，
-   绝对定位子元素的包含块是 padding box，padding 挡不住溢出——必须靠内缩。
-   卡片定尺寸（高含 2 行标注的预留），固定像素在任何 ≥720px 视口都保证落在桌内。 */
-.table-ring {
-  position: absolute;
-  inset: 66px 86px;
+/* 顶行 / 底行：1–3 张竖版卡横排居中（卡宽 clamp 保证最窄视口也放得下三张） */
+.table-row {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
 }
 
-/* ══ 桌心：纹章水印（2026-10-17 改版）══
-   桌心版图（A4）为塞进席位环付出了一整条代价链——桌子拉高到 3:2、桌心收窄到 47%、
-   mini 缩到 28×42 且无卡名、每区 cap 2 张 +「+N」、720–790 过渡带必然擦碰——实测观感
-   太紧凑。版图移回牌桌下方的全宽独立面板（44×66 带卡名、全量显示），桌心只留大块
-   纹章水印——铺满桌心、观感如一块桌布。pointer-events 关掉，不拦截席位环的任何交互。 */
+/* 中间行：左右各一席，桌心水印吃掉剩余空间；min-height 给「桌布」呼吸感 */
+.table-mid {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-height: 112px;
+}
+
+/* 桌心：纹章水印（纯装饰，z-index 低于席位卡（2）且 pointer-events: none） */
 .table-center {
-  position: absolute;
-  /* 与席位环同一坐标空间（inset 同 .table-ring），水印居中铺在环内 */
-  inset: 46px 78px;
+  flex: 1;
+  align-self: stretch;
   display: grid;
   place-items: center;
   z-index: 1;
@@ -527,10 +529,10 @@ em.rose-count {
 }
 
 .table-watermark {
-  /* 宽度定在带 inset 的 .table-center 网格里（有确定宽度，百分比不循环解析）；
-     svg 用 100% 跟随。76% ≈ 铺满桌心的「桌布」观感，又不碰环上的席位卡 */
-  width: 76%;
-  max-width: 640px;
+  /* 宽度定在 .table-center 网格里（有确定宽度，百分比不循环解析）；
+     82% ≈ 铺满桌心的「桌布」观感，又不碰左右两翼的席位卡 */
+  width: 82%;
+  max-width: 560px;
   opacity: 0.09;
 }
 
@@ -539,29 +541,30 @@ em.rose-count {
   margin: 0;
 }
 
-/* 环上的席位：绝对定位到归一化坐标处（行内 left/top 由 Board 按 seatLayout 写入） */
+/* 牌桌里的席位：普通文档流（分区由 Board 分好、排布交给 .table-row / .table-mid）；
+   position: relative 只作为眼睛角标的定位基准 */
 .table-scene .player-line {
-  position: absolute;
-  transform: translate(-50%, -50%);
+  position: relative;
   z-index: 2;
 }
 
-/* 环上把「行」改排成小卡：座位号 + 头像 + 昵称在上，手牌 / 水晶 / 持币居中，
-   标注独占下方整行（用户要求：标注正常横向排布、完整可见，预留两行空间——
-   一般玩家标注 ≤3 个：行 1 容两个，第 3 个折行；≥4 个超出 3 行封顶隐藏）。
-   紧凑列表模式不受影响：网格只在这个场景容器内生效。 */
+/* 竖版席位卡：座位/头像/昵称 → 手牌/水晶/持币 → 标注区（顺序与紧凑列表一致）。
+   3:4 竖版比例；宽度 clamp——桌面 132px、375 手机 ≈101px、320 极窄 ≈86px，
+   顶行 3 卡 + 间距始终放得下（窄视口参数单独预算过的教训）。
+   行高 auto 1fr auto：昵称行贴顶、手牌行在剩余空间居中、标注区贴底。 */
 .table-scene .player-row {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
   grid-template-areas:
     'seat avatar name'
     'hand crystal coin'
     'tags tags tags';
   align-items: center;
-  gap: 3px 6px;
-  /* 固定宽度：否则卡片宽度随昵称 / 标签内容变化，环上看起来参差不齐 */
-  width: 148px;
-  padding: 5px 9px;
+  gap: 4px 6px;
+  width: clamp(86px, 27vw, 132px);
+  aspect-ratio: 3 / 4;
+  padding: 8px 9px;
   border-radius: 10px;
 }
 
@@ -575,7 +578,9 @@ em.rose-count {
 
 .table-scene .player-row .pname {
   grid-area: name;
-  max-width: 88px;
+  /* 压掉列表模式的 4.4em 定宽：竖版卡里昵称吃掉剩余宽度，超出省略（title 看全名） */
+  width: auto;
+  min-width: 0;
   font-size: 12px;
 }
 
@@ -587,7 +592,7 @@ em.rose-count {
   grid-area: crystal;
 }
 
-/* 持币硬币独占一格（手牌 / 水晶同行，用户要求）；非持币时格子留空、卡片尺寸不变 */
+/* 持币硬币独占一格（手牌 / 水晶同行）；非持币时格子留空、卡片尺寸不变 */
 .table-scene .player-row .coin-cell {
   grid-area: coin;
   display: grid;
@@ -595,8 +600,7 @@ em.rose-count {
 }
 
 /* 标注区：独占第三行、全宽换行排布；紧凑药丸（11px 字 + 1.3 行高 ≈ 18px/行），
-   高度随标注数自然增长（0–2 个一行、3 个两行、4+ 三行封顶——极端超出隐藏，
-   title 与紧凑列表兜底）。桌高按两行标注的卡（~106px）预算。 */
+   高度封顶防撑破卡片（0–2 个一行、3 个两行、4+ 三行封顶隐藏——title 与紧凑列表兜底） */
 .table-scene .player-row .tags {
   grid-area: tags;
   justify-content: flex-start;
@@ -609,16 +613,18 @@ em.rose-count {
   line-height: 1.3;
 }
 
-/* 环上「（你）」由 .me 的描边色表达，省出一行宽度 */
+/* 桌上「（你）」由 .me 的描边色表达，省出一行宽度 */
 .table-scene .player-row .self-slot {
   display: none;
 }
 
-/* 眼睛标注改成卡片左上角角标（列表模式仍是左侧独立槽位；透明度语义不变） */
+/* 眼睛标注是卡片左上角角标（列表模式仍是左侧独立槽位；透明度语义不变）；
+   牌桌 padding 14px ≥ 角标外伸 7px，不会出界（绝对定位子元素不受父级 padding 约束，
+   但 .player-line 已是 relative 定位基准，外伸量在桌布 padding 内） */
 .table-scene .eye-slot {
   position: absolute;
-  top: -8px;
-  left: -8px;
+  top: -7px;
+  left: -7px;
   z-index: 3;
   width: 20px;
   height: 20px;
@@ -1611,6 +1617,24 @@ em.rose {
 
   .player-line {
     gap: 8px;
+  }
+
+  /* 竖版牌桌（手机）：收紧桌布留白与行距（卡宽由 clamp 自适应，三卡横排放得下） */
+  .table-scene {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .table-row {
+    gap: 6px;
+  }
+
+  .table-mid {
+    min-height: 88px;
+  }
+
+  .table-watermark {
+    width: 92%;
   }
 
   .eye-slot {

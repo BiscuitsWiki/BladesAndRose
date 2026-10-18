@@ -1,10 +1,10 @@
-import { type CSSProperties, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { avatarColor } from '../avatar';
 import { CrystalHex } from '../artwork';
 import type { SeatVisual } from '../scene';
 
 /**
- * 席位卡（步骤 4 · A3）：环上的一个座位，或紧凑列表里的一行。
+ * 席位卡（步骤 4 · A3）：竖版牌桌上的一个席位，或紧凑列表里的一行。
  *
  * 这是**原「玩家行」的等价搬移**——`.player-line` / `.player-row` / `data-prow` 以及
  * `me` / `picked` / `focused` / `offline` / `turn-pulse` 这些类名一律保留，因为：
@@ -14,13 +14,13 @@ import type { SeatVisual } from '../scene';
  *
  * 显示内容全部取自共享层 `scene.seatVisualOf`（单一来源，不再与 Board 各写一套）；
  * 「是不是自己」仍按 `playerID` 判断（观战 / 热座两条路径下都与视图的 `viewer` 等价，
- * 但用 playerID 更直白）。席位在环上的位置由 Board 算好后经 `slotStyle` 传入。
+ * 但用 playerID 更直白）。席位落在哪个分区由 Board 用 `scene.seatLayout` 分好组后
+ * 交给 TableScene 排布，本组件不关心自己在桌上的位置。
  */
 export function SeatCard({
   seat,
   name,
   visual,
-  slotStyle,
   isSelf,
   picked,
   focused,
@@ -36,8 +36,6 @@ export function SeatCard({
   /** 显示名（联机为昵称，热座回退引擎名，由 Board 解析后传入） */
   name: string;
   visual: SeatVisual;
-  /** 环上定位（归一化坐标 → 百分比）；紧凑列表模式下不生效（父级是静态流） */
-  slotStyle: CSSProperties;
   isSelf: boolean;
   /** 已被选为魔法目标 */
   picked: boolean;
@@ -60,7 +58,7 @@ export function SeatCard({
   }${offline ? ' offline' : ''}${pulse ? ' turn-pulse' : ''}${acting ? ' acting' : ''}`;
 
   return (
-    <div className="player-line" data-prow={seat} data-slot={seat} style={slotStyle}>
+    <div className="player-line" data-prow={seat}>
       {/* 标注槽位放在行按钮之外：行按钮常处于禁用态（禁用的按钮不会派发点击），
           而非睁眼玩家的标注在任何阶段都应该能点。 */}
       {eye}

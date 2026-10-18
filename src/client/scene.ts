@@ -5,10 +5,9 @@
  * 小程序端 WXSS / Canvas 2D）。因此本文件**不依赖 React / DOM / window**，只 import engine 的
  * 常量与 type-only 类型，返回值全部是可序列化的原始值——小程序端（阶段三）要原样复用这一份。
  *
- * 坐标约定（`seatLayout` 的 x / y）：相对「席位环容器」的 0–1 比例，端上用
- * `left: x*100%; top: y*100%; translate(-50%, -50%)` 定位。点落在半径 0.5 的圆上，
- * **椭圆化交给容器宽高比**（不施加 scale，卡片 rotate 才不会被裁切）；x 会取到 0 与 1 附近的
- * 极值，故容器需留安全内边距——两端按约 8% inset 处理即可（此约定写在这里，供两端对齐）。
+ * 分区约定（`seatLayout` 的 zone / col）：牌桌排成「顶行 / 中间（左·桌心·右）/ 底行」三段，
+ * `zone` 给出席位落在哪一段，`col` 给出段内从左到右的次序（自己恒在底部居中）。
+ * 端上把同一段的席位横排/居中即可，不再做绝对定位——竖版卡宽度随视口收缩也不会互相挤压。
  */
 import {
   FACTION_OF,
@@ -19,55 +18,76 @@ import {
   type PlayerViewEntry,
 } from '../engine';
 
-/** 保留 6 位小数：避免 cos/sin 的浮点尾巴（如 cos 90° = 6.1e-17）；-0 归一为 0 */
-function round6(value: number): number {
-  const rounded = Math.round(value * 1e6) / 1e6;
-  return rounded === 0 ? 0 : rounded;
-}
+/** 席位所在的桌区分区：顶行（横排 1–3）、左右两翼（各 1）、底行（1–3，自己居中或与下家同行） */
+export type SeatZone = 'top' | 'left' | 'right' | 'bottom';
 
-/** 归一化到 (−180, 180] */
-function normalizeAngle(deg: number): number {
-  let value = deg % 360;
-  if (value > 180) value -= 360;
-  if (value <= -180) value += 360;
-  return value;
-}
-
-/** 席位在环上的位置与朝向 */
+/** 席位在竖版牌桌上的位置与段内次序 */
 export interface SeatSlot {
   /** 座位号（0 起，与 boardgame.io 的 playerID 一致） */
   id: string;
-  /** 相对席位环容器的横向比例（0–1） */
-  x: number;
-  /** 相对席位环容器的纵向比例（0–1，向下为正） */
-  y: number;
-  /** 席位卡应施加的旋转角（度，顺时针为正）：0 = 正立（自己）、对面 = 180 */
-  angle: number;
+  /** 席位所在分区 */
+  zone: SeatZone;
+  /** 分区内从左到右的序号（left / right 恒 0；bottom 以自己为 col 1） */
+  col: number;
+  /** 该分区总席位数（端上可据此居中排布；left / right 恒 1） */
+  rowSize: number;
 }
 
 /**
- * 席位环布局：**自己恒在底部居中**，其余按「自己起顺时针」排布（与规则里
+ * 席位分布：**自己恒在底行**，其余按「自己起顺时针」排布（与规则里
  * 「自持币者起顺时针」同一方向），支持 5–10 人局与观战视角。
  *
  * - `k = (seat − selfSeat + count) % count`，`k = 0` 就是自己；
- * - 环角 `φ = 90° + k·360°/count`，`x = 0.5 + 0.5·cosφ`、`y = 0.5 + 0.5·sinφ`
- *   （y 向下 ⇒ φ 增大即屏幕顺时针）；k=1 落在左下（我的下家），偶数局 k=count/2 在正上方；
+ * - 形态（按人数；约定：顶 / 底行数量不一致时，底行（自己一侧）更少）：
+ *   5 人 = 底 1（自己）+ 左右各 1 + 顶 2；6 人 = 底 2（自己 + 下家）+ 左右各 1 + 顶 2；
+ *   7 人 = 底 2（自己 + 下家）+ 左右各 1 + 顶 3；8 人 = 底 3（自己 + 下家 / 上家）+ 顶 3；
+ *   ≥9 人超出竖版牌桌容量（顶 3 + 底 3 + 左右 2 = 8），端上自行切紧凑列表兜底，本函数仍按
+ *   「底 3 + 左右各 1 + 顶 n−5」给出可用的分布（顶行会到 4–5 张，端上不该用）；
+ * - 顺时针序即：底行左（下家）→ 左翼 → 顶行（左→右）→ 右翼 → 底行右（上家）；
+ *   5 人局没有底行补位，下家直接落在左翼；6–7 人局下家贴在自己左侧、上家落在右翼；
+ *   8 人局上下家分列底行两侧；
  * - `selfSeat` 为 null（观战 / 全局视图）时按 0 处理；`count < 1` 或非整数时返回空数组，
  *   座位号越界按取模归一（不会抛错，端上不必先校验）。
  */
 export function seatLayout(selfSeat: number | null, count: number): SeatSlot[] {
   if (!Number.isInteger(count) || count < 1) return [];
   const self = selfSeat === null ? 0 : ((selfSeat % count) + count) % count;
-  return Array.from({ length: count }, (_, k) => {
-    const phiDeg = 90 + (k * 360) / count;
-    const phi = (phiDeg * Math.PI) / 180;
-    return {
-      id: String((self + k) % count),
-      x: round6(0.5 + 0.5 * Math.cos(phi)),
-      y: round6(0.5 + 0.5 * Math.sin(phi)),
-      angle: round6(normalizeAngle(phiDeg - 90)),
-    };
-  });
+  /** 左右两翼各一席：5 人局起启用（更小的人数全部塞进顶行） */
+  const side = count >= 5;
+  /**
+   * 底行席位数：除自己外的席位先尽量平分给顶 / 底行，底行不超过顶行（顶底不一致时
+   * 底行更少，自己一侧留白）且至多 3 席——得到 5人=1、6–7人=2、≥8人=3。
+   */
+  const bottomSize = Math.max(1, Math.min(3, Math.floor((count - 2) / 2)));
+  /** 自己在底行内的列：单席即居中；多席时占中位（下家在左，底行 3 席时上家在右） */
+  const selfCol = bottomSize === 1 ? 0 : 1;
+  const topSize = Math.max(0, count - bottomSize - (side ? 2 : 0));
+
+  /** 底行占用的顺时针位：自己 + 下家（底行 ≥2 席时）+ 上家（底行 3 席时） */
+  const bottomKs = new Set<number>([0]);
+  if (bottomSize >= 2) bottomKs.add(1);
+  if (bottomSize >= 3) bottomKs.add(count - 1);
+
+  /** 去掉底行占用后、按顺时针剩下的 k（依次填 左翼 → 顶行 → 右翼） */
+  const middle: number[] = [];
+  for (let k = 1; k < count; k++) {
+    if (bottomKs.has(k)) continue;
+    middle.push(k);
+  }
+
+  const slotOfK = (k: number): SeatSlot => {
+    const id = String((self + k) % count);
+    if (k === 0) return { id, zone: 'bottom', col: selfCol, rowSize: bottomSize };
+    if (k === 1 && bottomSize >= 2) return { id, zone: 'bottom', col: 0, rowSize: bottomSize };
+    if (k === count - 1 && bottomSize >= 3)
+      return { id, zone: 'bottom', col: 2, rowSize: bottomSize };
+    const idx = middle.indexOf(k);
+    if (side && idx === 0) return { id, zone: 'left', col: 0, rowSize: 1 };
+    if (side && idx === middle.length - 1) return { id, zone: 'right', col: 0, rowSize: 1 };
+    return { id, zone: 'top', col: idx - (side ? 1 : 0), rowSize: topSize };
+  };
+
+  return Array.from({ length: count }, (_, k) => slotOfK(k));
 }
 
 /**

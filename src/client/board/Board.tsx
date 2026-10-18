@@ -15,7 +15,7 @@ import { BudMark, ClosedEyeMark, CrystalHex, OpenEyeMark } from '../artwork';
 import { CardFace, cardLabel } from '../cards';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
-import { seatLayout, seatVisualOf } from '../scene';
+import { seatLayout, seatVisualOf, type SeatZone } from '../scene';
 import { SeatCard } from './SeatCard';
 import { TableScene } from './TableScene';
 
@@ -148,12 +148,10 @@ export function Board({
   /** 回合提醒：该脉冲的座位，null = 不播 */
   const [turnPulse, setTurnPulse] = useState<string | null>(null);
   /**
-   * 席位视图：默认环绕（牌桌场景）；10 人局或窄屏时切紧凑列表（方案 §5.2 的兜底）。
-   * 窄屏默认走紧凑：环绕模式的最外侧席位卡有固定宽度，桌子一窄就会横向溢出页面。
+   * 席位视图：默认竖版牌桌（三行环绕）；9–10 人局超出容量（顶 3 + 底 3 + 左右 2 = 8）
+   * 时切紧凑列表（方案 §5.2 的兜底）。
    */
-  const [compactSeats, setCompactSeats] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth < 720,
-  );
+  const [compactSeats, setCompactSeats] = useState(() => G.players.length >= 9);
   /** 上一帧快照（动效判定的基准）；挂载时为 null → 首帧不播任何动画 */
   const prevSnapRef = useRef<AnimSnapshot | null>(null);
 
@@ -300,17 +298,20 @@ export function Board({
   );
 
   /**
-   * 环上坐标（共享纯函数 `scene.seatLayout`）：自己恒在底部居中、其余按「自己起顺时针」。
-   * 「自己」的取值：观战视角聚焦的座位优先（观战切到某座位时环也跟着转），否则就是本人的座位；
-   * 都没有（观战全局）时按座位 1 处理。
+   * 席位分布（共享纯函数 `scene.seatLayout`）：竖版三行牌桌——自己恒在底行（6–7 人局
+   * 与下家同行、其余人数居中），其余按「自己起顺时针」填入 底行两侧 → 左翼 → 顶行（左→右） → 右翼。
+   * 「自己」的取值：观战视角聚焦的座位优先（观战切到某座位时桌也跟着转），
+   * 否则就是本人的座位；都没有（观战全局）时按座位 1 处理。
    */
-  const ringSelfSeat =
+  const focusSeat =
     watchSeat !== null ? Number(watchSeat) : playerID === null ? null : Number(playerID);
-  const ringSlots = new Map(
-    seatLayout(ringSelfSeat, G.players.length).map((slot) => [slot.id, slot] as const),
-  );
-  /** 取座位在环上的归一化坐标（紧凑列表模式下只作为行内样式存在、对静态定位不生效） */
-  const slotOf = (seat: string) => ringSlots.get(seat) ?? { id: seat, x: 0.5, y: 0.5, angle: 0 };
+  const seatSlots = seatLayout(focusSeat, G.players.length);
+  const slotOf = (seat: string) => seatSlots.find((slot) => slot.id === seat);
+  /** 某一分区的席位（卡上从左到右的顺序；紧凑列表不用分区、按座位序竖排） */
+  const zoneSeats = (zone: SeatZone) =>
+    G.players
+      .filter((p) => slotOf(p.id)?.zone === zone)
+      .sort((a, b) => (slotOf(a.id)?.col ?? 0) - (slotOf(b.id)?.col ?? 0));
 
   /**
    * 桌心版图（2026-10-17 改版）：版图移回全宽独立面板（紧凑列表沿用同一渲染），
@@ -370,77 +371,74 @@ export function Board({
     );
   }
 
-  /** 席位卡列表：环上坐标与显示内容都算好，交给外层 TableScene 排布 */
-  function renderSeatCards() {
-    return G.players.map((p) => {
-      /**
-       * 行末标签、水晶编号与持币硬币统一由共享层 `scene.seatVisualOf` 给出
-       * （口径与 Board 原实现逐字对齐，由 `scene.test.ts` 锁死，供步骤 4 的席位卡复用）。
-       */
-      const visual = seatVisualOf(G, p, { offline: isOffline(p.id), ai: isAi(p.id) });
+  /** 单张席位卡：分区与显示内容都算好，交给外层 TableScene 按三行排布（紧凑列表按座位序竖排） */
+  function renderSeatCard(p: PlayerViewEntry) {
+    /**
+     * 行末标签、水晶编号与持币硬币统一由共享层 `scene.seatVisualOf` 给出
+     * （口径与 Board 原实现逐字对齐，由 `scene.test.ts` 锁死，供步骤 4 的席位卡复用）。
+     */
+    const visual = seatVisualOf(G, p, { offline: isOffline(p.id), ai: isAi(p.id) });
 
-      const selectable =
-        (G.phase === 'magic' && isMyTurn && !p.crystalPlaced) ||
-        (G.phase === 'magicTargets' && isMyTurn && candidates.some((c) => c.id === p.id)) ||
-        (G.phase === 'prePick' && isMyTurn && prePickPool.includes(p.id)) ||
-        (G.phase === 'redraw' && isMyTurn && redrawCandidates.some((c) => c.id === p.id));
+    const selectable =
+      (G.phase === 'magic' && isMyTurn && !p.crystalPlaced) ||
+      (G.phase === 'magicTargets' && isMyTurn && candidates.some((c) => c.id === p.id)) ||
+      (G.phase === 'prePick' && isMyTurn && prePickPool.includes(p.id)) ||
+      (G.phase === 'redraw' && isMyTurn && redrawCandidates.some((c) => c.id === p.id));
 
-      // 睁眼玩家视角：整列由系统标注（组内=睁眼、组外=未睁眼），不允许修改；
-      // 非睁眼玩家视角：默认半透明「闭眼」，点击在「闭眼 ⇄ 睁眼」之间切换自己的判断。
-      const eyeOpen = isNightViewer ? myNightGroup.includes(p.id) : isEyeMarked(p.id);
-      const eyeClass = `eye-slot${eyeOpen ? ' marked' : ''}`;
-      const eyeTitle = isNightViewer
-        ? eyeOpen
-          ? '夜间睁眼的玩家（系统标注，不可修改）'
-          : '夜间未睁眼的玩家（系统标注，不可修改）'
-        : eyeOpen
-          ? '取消「睁眼」标注'
-          : '标注为「睁眼」玩家（仅记录在你的视角，不会公开）';
+    // 睁眼玩家视角：整列由系统标注（组内=睁眼、组外=未睁眼），不允许修改；
+    // 非睁眼玩家视角：默认半透明「闭眼」，点击在「闭眼 ⇄ 睁眼」之间切换自己的判断。
+    const eyeOpen = isNightViewer ? myNightGroup.includes(p.id) : isEyeMarked(p.id);
+    const eyeClass = `eye-slot${eyeOpen ? ' marked' : ''}`;
+    const eyeTitle = isNightViewer
+      ? eyeOpen
+        ? '夜间睁眼的玩家（系统标注，不可修改）'
+        : '夜间未睁眼的玩家（系统标注，不可修改）'
+      : eyeOpen
+        ? '取消「睁眼」标注'
+        : '标注为「睁眼」玩家（仅记录在你的视角，不会公开）';
 
-      // 标注槽位放在行按钮之外：行按钮常处于禁用态（禁用的按钮不会派发点击），
-      // 而非睁眼玩家的标注在任何阶段都应该能点。
-      const eye = spectating ? (
-        // 观战席看不到睁眼 / 闭眼信息：保留空槽位对齐
-        <span className="eye-slot" aria-hidden="true" />
-      ) : isNightViewer ? (
-        <span className={`${eyeClass} locked`} title={eyeTitle}>
-          {eyeOpen ? <OpenEyeMark /> : <ClosedEyeMark />}
-        </span>
-      ) : (
-        <button
-          className={eyeClass}
-          aria-pressed={eyeOpen}
-          title={eyeTitle}
-          onClick={() => toggleEyeMark(p.id)}
-        >
-          {eyeOpen ? <OpenEyeMark /> : <ClosedEyeMark />}
-        </button>
-      );
+    // 标注槽位放在行按钮之外：行按钮常处于禁用态（禁用的按钮不会派发点击），
+    // 而非睁眼玩家的标注在任何阶段都应该能点。
+    const eye = spectating ? (
+      // 观战席看不到睁眼 / 闭眼信息：保留空槽位对齐
+      <span className="eye-slot" aria-hidden="true" />
+    ) : isNightViewer ? (
+      <span className={`${eyeClass} locked`} title={eyeTitle}>
+        {eyeOpen ? <OpenEyeMark /> : <ClosedEyeMark />}
+      </span>
+    ) : (
+      <button
+        className={eyeClass}
+        aria-pressed={eyeOpen}
+        title={eyeTitle}
+        onClick={() => toggleEyeMark(p.id)}
+      >
+        {eyeOpen ? <OpenEyeMark /> : <ClosedEyeMark />}
+      </button>
+    );
 
-      return (
-        <SeatCard
-          key={p.id}
-          seat={p.id}
-          name={nameOf(p.id)}
-          visual={visual}
-          slotStyle={{ left: `${slotOf(p.id).x * 100}%`, top: `${slotOf(p.id).y * 100}%` }}
-          isSelf={p.id === playerID}
-          picked={pickedTargets.includes(p.id)}
-          focused={watchSeat === p.id}
-          offline={isOffline(p.id)}
-          pulse={turnPulse === p.id}
-          acting={G.currentActor === p.id}
-          selectable={selectable}
-          onAct={() => {
-            if (G.phase === 'magic') moves.passCoin(p.id);
-            else if (G.phase === 'magicTargets') toggleTarget(p.id);
-            else if (G.phase === 'prePick') moves.pickPreShuffleTarget(p.id);
-            else if (G.phase === 'redraw') moves.resolveRedraw(p.id);
-          }}
-          eye={eye}
-        />
-      );
-    });
+    return (
+      <SeatCard
+        key={p.id}
+        seat={p.id}
+        name={nameOf(p.id)}
+        visual={visual}
+        isSelf={p.id === playerID}
+        picked={pickedTargets.includes(p.id)}
+        focused={watchSeat === p.id}
+        offline={isOffline(p.id)}
+        pulse={turnPulse === p.id}
+        acting={G.currentActor === p.id}
+        selectable={selectable}
+        onAct={() => {
+          if (G.phase === 'magic') moves.passCoin(p.id);
+          else if (G.phase === 'magicTargets') toggleTarget(p.id);
+          else if (G.phase === 'prePick') moves.pickPreShuffleTarget(p.id);
+          else if (G.phase === 'redraw') moves.resolveRedraw(p.id);
+        }}
+        eye={eye}
+      />
+    );
   }
 
   /**
@@ -596,12 +594,21 @@ export function Board({
             ))}
           </span>
         )}
-        {/* 兜底视图：窄屏或 10 人局切回改造前的竖排列表（方案 §5.2） */}
+        {/* 兜底视图：9–10 人局超出竖版牌桌容量时切回改造前的竖排列表（方案 §5.2） */}
         <button className="btn small" onClick={() => setCompactSeats((prev) => !prev)}>
           {compactSeats ? '环绕席位' : '紧凑列表'}
         </button>
       </div>
-      <TableScene compact={compactSeats}>{renderSeatCards()}</TableScene>
+      {compactSeats ? (
+        <div className="players">{G.players.map((p) => renderSeatCard(p))}</div>
+      ) : (
+        <TableScene
+          top={<>{zoneSeats('top').map((p) => renderSeatCard(p))}</>}
+          left={<>{zoneSeats('left').map((p) => renderSeatCard(p))}</>}
+          right={<>{zoneSeats('right').map((p) => renderSeatCard(p))}</>}
+          bottom={<>{zoneSeats('bottom').map((p) => renderSeatCard(p))}</>}
+        />
+      )}
       {renderActions()}
 
       <div className={`panel progress${isMyTurn ? ' me' : ''}`}>
