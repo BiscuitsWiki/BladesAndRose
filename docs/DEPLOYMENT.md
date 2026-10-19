@@ -14,7 +14,7 @@
 | 部署方式 | 上传源码 → `sudo docker compose -p bar up -d --build` |
 | 更新步骤 | ① `tar -czf` 打包 `src/ public/ Dockerfile .dockerignore package.json package-lock.json tsconfig.json vite.config.ts index.html`（`docs/` 与 `*.md` 被 `.dockerignore` 排除，不进镜像）→ ② `scp` 上传 → ③ 服务器 `sudo tar -xzf` 解包到 `/opt/bar` → ④ 先 `sudo docker tag blades-and-rose:latest blades-and-rose:prev` 留回滚点 → ⑤ `sudo docker compose -p bar up -d --build`。**`Dockerfile` 必须在打包清单里**：`public/` 进镜像靠它的 `COPY public ./public`，漏传就会「前端新代码已上线、但卡面全部 404」（2026-10-15 实际踩到过：只打包 `public/` 而没带 `Dockerfile`，服务器上的旧 Dockerfile 里没有这行） |
 | 回滚 | `sudo docker tag blades-and-rose:prev blades-and-rose:latest && sudo docker compose -p bar up -d`（源码可另从 GitHub `main` 取） |
-| 当前版本 | GitHub `main` 提交 `f36a547`（2026-10-19 **第五次**部署：底行改为牌桌外部独立 `.self-console` 自区面板——自己的席位卡 + 手牌空间、金色左侧描边；7–8 人局两翼各 2 张；观战自区程序画卡背）。回滚点 `blades-and-rose:prev` = 第四次部署的 `ad21e45` |
+| 当前版本 | GitHub `main` 提交 `e9e1234`（2026-10-19 **第六次**部署：桌高恒定不随人数跳动——`.table-mid` 恒按两翼 2 行预留高度；顶行席位 `space-evenly` 按人数铺开；手牌操作行常驻，未轮到自己时「跳过」禁用占位、区域高度不随回合跳动）。回滚点 `blades-and-rose:prev` = 第五次部署的 `f36a547` |
 | 限流 | 进程内按 IP 固定窗口（游客发号 20/分、注册 10/分、建房 20/分、座位认领 60/分、房间操作 60/分、房间信息 300/分），超限 429 |
 | SSH 登录 | 允许密码登录（2026-10-10 已回滚"仅密钥"加固：`00-hardening.conf` 已删除，配置回到原状）；`/etc/ssh/` 下的 `*.bak-hardening-20261009` 为当时备份，可随时清理。**2026-10-17 起本机 `id_ed25519` 公钥已加入 ubuntu 的 authorized_keys（免密部署），私钥只存本机** |
 | SSH 防爆破 | fail2ban（2026-10-10 安装，已设为开机自启）：sshd jail，10 分钟内失败 5 次封禁 6 小时，重复封禁时长翻倍（上限 1 周）；后端用 polling 读 `/var/log/auth.log`（Ubuntu 24.04 SSH 为 socket 激活，systemd 后端匹配不到日志）；配置在 `/etc/fail2ban/jail.d/bar-ssh.local`；查看 `sudo fail2ban-client status sshd`，解封 `sudo fail2ban-client set sshd unbanip <IP>` |
