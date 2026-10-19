@@ -497,27 +497,24 @@ export function Board({
   }
 
   /**
-   * 阶段动作按钮：换牌阶段的「放弃换牌」、扩充技能「没有可选目标」时的确认。
-   * 它们只对本人出现，因此并入下方的手牌空间，按钮不再散落在牌桌与面板两处。
+   * 阶段专属动作按钮（只返回按钮本身，并入手牌区的常驻操作行）：
+   * 换牌阶段的「放弃换牌」、技能目标池为空时的确认。
+   * 返回 null 表示当前没有阶段专属动作，操作行走常规出牌按钮。
    */
-  function renderPhaseActions() {
+  function phaseActionButtons() {
     // 扩充技能可能出现「没有可选目标」（如 5 号技能目标池为空）：确认后按空集合结算
     if (G.phase === 'magicTargets' && isMyTurn && (G.pendingMagic?.needTargets ?? 1) === 0) {
       return (
-        <div className="actions tight">
-          <button className="btn primary" onClick={() => moves.resolveMagicTargets([])}>
-            没有可选目标，确认
-          </button>
-        </div>
+        <button className="btn primary" onClick={() => moves.resolveMagicTargets([])}>
+          没有可选目标，确认
+        </button>
       );
     }
     if (!canResolveRedraw(G, playerID)) return null;
     return (
-      <div className="actions tight">
-        <button className="btn" onClick={() => moves.resolveRedraw()}>
-          放弃换牌
-        </button>
-      </div>
+      <button className="btn" onClick={() => moves.resolveRedraw()}>
+        放弃换牌
+      </button>
     );
   }
 
@@ -541,6 +538,8 @@ export function Board({
 
   /**
    * 手牌空间（方案 §5.1：底行＝当前视角玩家独享）：身份行 + 技能说明 + 手牌卡面 + 操作按钮。
+   * 操作按钮行**常驻**——未轮到自己时「跳过」禁用占位、阶段专属按钮原位替换，
+   * 保证区域高度不随回合切换跳动。
    *
    * 一份内容两处挂载：
    *   - `withHeading = false`：牌桌底行自区的右侧（环绕席位模式的默认位置）；
@@ -603,40 +602,48 @@ export function Board({
             <span className="dim">本轮司教若持有手牌必须出牌（规则公开，身份不公开）</span>
           </p>
         )}
-        {handOps && (
-          <div className="actions">
-            {handOps.canGoLast && (
-              <button className="btn" onClick={() => moves.chooseGoLast()}>
-                我要最后行动
-              </button>
-            )}
-            {canRandomPlay(G, playerID) && (
-              <button className="btn primary" onClick={() => moves.playRandom()}>
-                随机出牌
-              </button>
-            )}
-            {handOps.canConfirm && (
-              <>
-                <button
-                  className="btn primary"
-                  onClick={() => {
-                    moves.playCard(pickedCardId!);
-                    setPickedCardId(null);
-                  }}
-                >
-                  {G.pendingRedraw === playerID ? '确认替换' : '确认出这张牌'}
+        {/* 操作行常驻（方案 §5.1）：轮不到自己 / 非出牌阶段时按钮禁用占位，
+            行高不随回合跳动；阶段专属按钮（放弃换牌等）在同一行内替换常规出牌按钮 */}
+        <div className="actions">
+          {phaseActionButtons() ?? (
+            <>
+              {handOps?.canGoLast && (
+                <button className="btn" onClick={() => moves.chooseGoLast()}>
+                  我要最后行动
                 </button>
-                <button className="btn" onClick={() => setPickedCardId(null)}>
-                  取消
+              )}
+              {canRandomPlay(G, playerID) && (
+                <button className="btn primary" onClick={() => moves.playRandom()}>
+                  随机出牌
                 </button>
-              </>
-            )}
-            <button className="btn" disabled={!handOps.canSkip} onClick={() => moves.passTurn()}>
-              跳过
-            </button>
-          </div>
-        )}
-        {renderPhaseActions()}
+              )}
+              {handOps?.canConfirm && (
+                <>
+                  <button
+                    className="btn primary"
+                    onClick={() => {
+                      moves.playCard(pickedCardId!);
+                      setPickedCardId(null);
+                    }}
+                  >
+                    {G.pendingRedraw === playerID ? '确认替换' : '确认出这张牌'}
+                  </button>
+                  <button className="btn" onClick={() => setPickedCardId(null)}>
+                    取消
+                  </button>
+                </>
+              )}
+              <button
+                className="btn"
+                disabled={!handOps?.canSkip}
+                title={handOps ? undefined : '未到你的出牌回合'}
+                onClick={() => moves.passTurn()}
+              >
+                跳过
+              </button>
+            </>
+          )}
+        </div>
       </>
     );
 

@@ -508,21 +508,25 @@ em.rose-count {
     var(--surface);
 }
 
-/* 顶行：2–3 张席位卡横排居中（卡宽 clamp 保证最窄视口也放得下三张） */
+/* 顶行：2–3 张席位卡按剩余宽度均匀分布（space-evenly）——顶行卡越少间距越大，
+   席位沿桌沿铺开（如 5 人局顶 2 张分居左右上方，而不是挤在中间）；
+   gap 仅作为窄视口下的最小间距兜底 */
 .table-row {
   display: flex;
-  justify-content: center;
+  justify-content: space-evenly;
   gap: 10px;
 }
 
-/* 中间行：左翼 + 桌心水印 + 右翼（两翼各 0–2 席，纵排见 .table-wing）；
-   min-height 给「桌布」呼吸感 */
+/* 中间行：左翼 + 桌心水印 + 右翼（两翼各 0–2 席，纵排见 .table-wing）。
+   min-height 恒按「两翼 2 行」预留（席位卡 114px × 2 + 两翼行距 10px ≈ 238，取 240 留 2px 冗余
+   确保 7–8 人局两翼内容也被同一高度收口）：5–6 人局两翼只有 1 张卡时同样占住 2 行高度
+   （单卡垂直居中），保证 5–8 人局桌布高度一致，不随人数增减跳动 */
 .table-mid {
   display: flex;
   align-items: center;
   gap: 10px;
   flex: 1;
-  min-height: 112px;
+  min-height: 240px;
 }
 
 /* 桌心：纹章水印（纯装饰，z-index 低于席位卡（2）且 pointer-events: none） */
@@ -684,12 +688,10 @@ em.rose-count {
   gap: 8px;
 }
 
-/* 面板态的块级间距在手牌空间里收掉（间距统一由上面的 gap 负责）；手牌行保留自动换行。
-   `.actions.tight` 的 margin-top 也要一并压掉，故单列一条以取得足够特异性 */
+/* 面板态的块级间距在手牌空间里收掉（间距统一由上面的 gap 负责）；手牌行保留自动换行 */
 .self-hand .identity,
 .self-hand .skill-note,
-.self-hand .actions,
-.self-hand .actions.tight {
+.self-hand .actions {
   margin: 0;
 }
 
@@ -1020,10 +1022,6 @@ em.rose-count {
 .room-input:focus {
   outline: none;
   border-color: var(--gold);
-}
-
-.actions.tight {
-  margin-top: 10px;
 }
 
 /* 大厅顶部的身份条：UID 格子（游客 10 位 / 专属账号 9 位）+ 注册 / 登录 / 退出 */
@@ -1773,7 +1771,8 @@ em.rose {
   }
 
   .table-mid {
-    min-height: 88px;
+    /* 同桌面：恒按两翼 2 行预留（114px × 2 + 两翼行距 6px ≈ 234，取 236 留冗余），人数不同高度一致 */
+    min-height: 236px;
   }
 
   /* 两翼纵排同理收紧；左翼的反向由上面的 .table-wing.left 保持 */
