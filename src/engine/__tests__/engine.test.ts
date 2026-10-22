@@ -681,6 +681,47 @@ describe('技能边界', () => {
       expect(s.modifiers.revealInOrder).toBe(true); // 本轮才是 2 号
     });
   });
+
+  describe('目标池不足时按池收敛（防卡死）', () => {
+    it('强制出牌：其他人都无手牌时跳过结算，直接进入出牌阶段', () => {
+      const s = newGame({ crystals: { 0: 1 } }); // 水晶 1 = 强制出牌（需 1 名有手牌的其他玩家）
+      s.players.forEach((pl, i) => {
+        if (i !== 0) pl.hand = [];
+      });
+      const next = applyMove(s, { type: 'passCoin', playerId: 'p0', to: 'p0' });
+      expect(next.phase).toBe('play'); // 未卡在 magicTargets
+      expect(next.pendingMagic).toBeNull();
+      expect(next.log.some((l) => l.includes('强制出牌') && l.includes('跳过'))).toBe(true);
+    });
+
+    it('行动绑定：有手牌的其他玩家不足 2 人时必选数收敛为 1', () => {
+      const s = newGame({ crystals: { 0: 5 } }); // 水晶 5 = 行动绑定（需 2 名有手牌的其他玩家）
+      s.players.forEach((pl, i) => {
+        if (i !== 0 && i !== 1) pl.hand = [];
+      });
+      const next = applyMove(s, { type: 'passCoin', playerId: 'p0', to: 'p0' });
+      expect(next.phase).toBe('magicTargets');
+      expect(playerView(next, 'p0').pendingMagic?.needTargets).toBe(1);
+      // 只指定那名有手牌的玩家即可完成结算（原实现要求恰好 2 人，会永久卡死）
+      const done = applyMove(next, {
+        type: 'resolveMagicTargets',
+        playerId: 'p0',
+        targets: [p(next, 1).id],
+      });
+      expect(done.phase).toBe('play');
+    });
+
+    it('行动绑定：其他人都无手牌时跳过结算，直接进入出牌阶段', () => {
+      const s = newGame({ crystals: { 0: 5 } });
+      s.players.forEach((pl, i) => {
+        if (i !== 0) pl.hand = [];
+      });
+      const next = applyMove(s, { type: 'passCoin', playerId: 'p0', to: 'p0' });
+      expect(next.phase).toBe('play');
+      expect(next.pendingMagic).toBeNull();
+      expect(next.log.some((l) => l.includes('行动绑定') && l.includes('跳过'))).toBe(true);
+    });
+  });
 });
 
 describe('playerView 隐藏信息', () => {

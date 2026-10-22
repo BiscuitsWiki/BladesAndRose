@@ -9,9 +9,11 @@ import {
   GUEST_UID_MAX,
   GUEST_UID_MIN,
   hashPassword,
+  MAX_GUEST_RECORDS,
   parseAccountFile,
   randomUid,
   serializeAccountFile,
+  trimGuests,
   uidKind,
   validPassword,
   validUsername,
@@ -116,6 +118,20 @@ describe('账号文件解析', () => {
   it('序列化可往返', () => {
     const file = { version: 1 as const, accounts: [], guests: ['1000000001'] };
     expect(parseAccountFile(serializeAccountFile(file)).file).toEqual(file);
+  });
+
+  it('游客发号记录只保留最近的 MAX_GUEST_RECORDS 条（防文件无限增长）', () => {
+    const many = Array.from({ length: MAX_GUEST_RECORDS + 5 }, (_, i) => String(GUEST_UID_MIN + i));
+    const trimmed = trimGuests(many);
+    expect(trimmed).toHaveLength(MAX_GUEST_RECORDS);
+    expect(trimmed[0]).toBe(String(GUEST_UID_MIN + 5)); // 最旧的 5 条被淘汰
+    expect(trimGuests(['1000000001'])).toEqual(['1000000001']); // 未超限时原样保留
+
+    // 解析路径同样裁剪；裁剪属正常操作，不算「非法条目」告警
+    const text = JSON.stringify({ version: 1, accounts: [], guests: many });
+    const { file, warning } = parseAccountFile(text);
+    expect(file.guests).toHaveLength(MAX_GUEST_RECORDS);
+    expect(warning).toBeNull();
   });
 });
 

@@ -351,12 +351,17 @@ export function createRoom(
       playerID: '0',
       matchID: room,
     });
+    let settled = false;
     const timer = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
       client.stop();
       reject(new Error('连接房间服务器超时，请确认已运行 npm run dev:server'));
     }, 5000);
     const check = () => {
+      if (settled) return; // 已超时/已完成：终止自旋，避免定时器链永久空转
       if (client.getState() !== null) {
+        settled = true;
         window.clearTimeout(timer);
         client.stop();
         resolve();
@@ -402,7 +407,8 @@ export async function joinRoom({
       saveCredentials(gameName, room, seat, outcome.credentials);
       return outcome.credentials;
     }
-    if (outcome.kind === 'conflict' && existing) return existing; // 自己此前加入过：视为重连
+    // 冲突（座位被他人占用 / 本地凭据已失效）时绝不返回旧凭据：
+    // 旧凭据连上去只会 unauthorized 静默失败，直接把服务器的冲突文案抛给界面提示换座位
     throw new Error(outcome.kind === 'no-match' ? '房间创建失败，请重试' : outcome.message);
   }
 

@@ -83,6 +83,11 @@ function doPassCoin(state: GameState, playerId: PlayerId, to: PlayerId): void {
   if (targetSpecOf(skill) === 'none') {
     applySkill(state, skill, to, []);
     state.phase = 'play';
+  } else if (resolveTargets(state, skill, to).need === 0) {
+    // 目标池为空（如全场已无手牌）：不进入目标选择，直接按效果自带的
+    // 「无法结算，跳过」兜底结算——否则 magicTargets 阶段没有任何合法动作，对局会永久卡死
+    applySkill(state, skill, to, []);
+    state.phase = 'play';
   } else {
     state.pendingMagic = { crystal: target.crystal, skill, chooser: to, targets: [] };
     state.phase = 'magicTargets';

@@ -25,7 +25,7 @@
  * 账号表落盘在 data/accounts.json（可用环境变量 BLADES_ACCOUNTS_FILE 覆盖），跨重启保留；
  * 房间与对局仍只在进程内存里（watch 重启即清空，测试者重新进房间号即可）。
  */
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { existsSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -238,7 +238,15 @@ function registerStaticSite(): void {
 
   server.app.use(async (ctx, next) => {
     if (ctx.method !== 'GET' && ctx.method !== 'HEAD') return next();
-    const urlPath = decodeURIComponent(ctx.path);
+    let urlPath: string;
+    try {
+      urlPath = decodeURIComponent(ctx.path);
+    } catch {
+      // 非法百分号编码（如 /%zz）：按坏请求处理，不要抛成 500
+      ctx.status = 400;
+      ctx.body = { error: '非法的 URL 编码' };
+      return;
+    }
     const target = path.resolve(DIST_DIR, urlPath.replace(/^\/+/, ''));
     // 路径穿越防护：解析结果必须仍在 dist 目录内
     if (target !== DIST_DIR && !target.startsWith(DIST_DIR + path.sep)) return next();
@@ -496,12 +504,15 @@ function activeSpectators(matchID: string): string[] {
     .map((entry) => entry.name);
 }
 
-/** 生成未被使用过的 6 位房间码 */
+/**
+ * 生成未被使用过的 6 位房间码。
+ * 房间码是进入 / 观战他人对局的唯一凭据，必须用密码学随机数（不能用可预测的 Math.random）
+ */
 function newRoomCode(): string {
   for (;;) {
     let code = '';
     for (let i = 0; i < 6; i++) {
-      code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+      code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
     }
     if (!issuedRoomCodes.has(code)) {
       issuedRoomCodes.add(code);
@@ -1174,99 +1185,112 @@ async function runAiTakeover(
  * 房里已无对局（如全员断线被释放、房主重开后没回来）时，顺手复位开局状态与房主，等人回来重新推得。
  */
 function watchRooms(): void {
+  /** 上一趟巡检是否仍在进行：AI 代打（submitMove）单趟可能耗时十几秒，超过巡检间隔，须防止重叠 */
+  let sweeping = false;
   setInterval(async () => {
-    for (const [matchID, extra] of [...roomExtras]) {
-      const now = Date.now();
-      const { metadata, state } = await server.db.fetch(matchID, { metadata: true, state: true });
-      let players = metadata?.players as unknown as Record<string, SeatMeta> | undefined;
-      const master = state as unknown as MasterState | undefined;
-      const inProgress = isGameInProgress(extra, master);
-
-      // 1) 在线状态：断线记录与 AI 托管标记
-      if (players) {
-        for (const [seat, meta] of Object.entries(players)) {
-          if (!meta?.name) continue;
-          const record = seatPresence(extra, seat);
-          if (meta.isConnected === false) {
-            record.offlineSince ??= now;
-            if (inProgress && !record.ai && now - record.offlineSince >= AI_TAKEOVER_MS) {
-              record.ai = true;
-              console.log(
-                `房间 ${matchID} 座位 ${Number(seat) + 1} 断线超过 ${AI_TAKEOVER_MS / 60_000} 分钟，由 AI 暂时托管（出牌跳过、技能随机选人）`,
-              );
-            }
-            continue;
-          }
-          // 看到在线信号就是本人回来了：AI 代打只发动作、不做 sync，不会把 isConnected 翻成 true，
-          // 因此这里不需要额外的连续确认。
-          if (record.offlineSince !== null) {
-            record.offlineSince = null;
-            if (record.ai) {
-              record.ai = false;
-              console.log(`房间 ${matchID} 座位 ${Number(seat) + 1} 的玩家已回来，AI 托管结束`);
-            }
-          }
-        }
-        // 清理已离座座位的记录
-        for (const seat of [...extra.presence.keys()]) {
-          if (!players[seat]?.name) extra.presence.delete(seat);
-        }
-      }
-
-      // 2) 断线超时 → 按退出房间处理（仅未开局 / 对局已结束时；对局进行中保留座位到本局结束）
-      if (players && metadata && !inProgress) {
-        const freed: string[] = [];
-        for (const [seat, meta] of Object.entries(players)) {
-          if (!meta?.name || meta.isConnected !== false) continue;
-          const since = extra.presence.get(seat)?.offlineSince ?? null;
-          if (since === null || now - since < OFFLINE_LEAVE_MS) continue;
-          delete meta.name;
-          delete meta.credentials;
-          delete meta.isConnected; // 座位彻底腾空：新入座者不会继承「断线」标记
-          extra.presence.delete(seat);
-          extra.uids.delete(seat); // UID 绑定随座位释放一起清除
-          freed.push(seat);
-        }
-        if (freed.length > 0) {
-          const anyNamed = Object.values(players).some((player) => player?.name);
-          if (anyNamed) await server.db.setMetadata(matchID, metadata);
-          else {
-            await server.db.wipe(matchID);
-            players = undefined;
-          }
-          if (!players) resetEmptyRoomState(extra);
-          console.log(
-            `房间 ${matchID} 座位 ${freed.map((seat) => Number(seat) + 1).join('、')} 断线超过 ${OFFLINE_LEAVE_MS / 1000} 秒，已按退出房间处理`,
-          );
-        }
-      }
-
-      // 3) 空房间留存与到期销毁
-      if (inProgress) {
-        extra.emptySince = null; // 对局进行中：等玩家回来，不销毁
-      } else if (hasPresentSeated(players)) {
-        extra.emptySince = null;
-      } else {
-        if (extra.emptySince === null) {
-          extra.emptySince = now;
-          console.log(`房间 ${matchID} 已空置，留存 ${RETAIN_EMPTY_MS / 1000} 秒等待重新进入`);
-        }
-        // 房里已无对局（如全员断线被释放、房主重开后没回来）：复位开局状态与房主，等人回来重新推得
-        if (!players) resetEmptyRoomState(extra);
-        if (now - extra.emptySince >= RETAIN_EMPTY_MS) {
-          roomExtras.delete(matchID);
-          if (players) await server.db.wipe(matchID);
-          console.log(`房间 ${matchID} 空置超过 ${RETAIN_EMPTY_MS / 1000} 秒，已销毁（房间码失效）`);
-          continue;
-        }
-      }
-
-      // 4) AI 托管代打
-      if (inProgress && players && metadata) {
-        await runAiTakeover(matchID, extra, players, master!, metadata.gameName);
-      }
+    if (sweeping) return;
+    sweeping = true;
+    try {
+      await sweepRooms();
+    } finally {
+      sweeping = false;
     }
   }, EMPTY_SWEEP_MS);
+}
+
+/** 一趟房间巡检（watchRooms 每隔 EMPTY_SWEEP_MS 触发一次；串行执行，不重叠） */
+async function sweepRooms(): Promise<void> {
+  for (const [matchID, extra] of [...roomExtras]) {
+    const now = Date.now();
+    const { metadata, state } = await server.db.fetch(matchID, { metadata: true, state: true });
+    let players = metadata?.players as unknown as Record<string, SeatMeta> | undefined;
+    const master = state as unknown as MasterState | undefined;
+    const inProgress = isGameInProgress(extra, master);
+
+    // 1) 在线状态：断线记录与 AI 托管标记
+    if (players) {
+      for (const [seat, meta] of Object.entries(players)) {
+        if (!meta?.name) continue;
+        const record = seatPresence(extra, seat);
+        if (meta.isConnected === false) {
+          record.offlineSince ??= now;
+          if (inProgress && !record.ai && now - record.offlineSince >= AI_TAKEOVER_MS) {
+            record.ai = true;
+            console.log(
+              `房间 ${matchID} 座位 ${Number(seat) + 1} 断线超过 ${AI_TAKEOVER_MS / 60_000} 分钟，由 AI 暂时托管（出牌跳过、技能随机选人）`,
+            );
+          }
+          continue;
+        }
+        // 看到在线信号就是本人回来了：AI 代打只发动作、不做 sync，不会把 isConnected 翻成 true，
+        // 因此这里不需要额外的连续确认。
+        if (record.offlineSince !== null) {
+          record.offlineSince = null;
+          if (record.ai) {
+            record.ai = false;
+            console.log(`房间 ${matchID} 座位 ${Number(seat) + 1} 的玩家已回来，AI 托管结束`);
+          }
+        }
+      }
+      // 清理已离座座位的记录
+      for (const seat of [...extra.presence.keys()]) {
+        if (!players[seat]?.name) extra.presence.delete(seat);
+      }
+    }
+
+    // 2) 断线超时 → 按退出房间处理（仅未开局 / 对局已结束时；对局进行中保留座位到本局结束）
+    if (players && metadata && !inProgress) {
+      const freed: string[] = [];
+      for (const [seat, meta] of Object.entries(players)) {
+        if (!meta?.name || meta.isConnected !== false) continue;
+        const since = extra.presence.get(seat)?.offlineSince ?? null;
+        if (since === null || now - since < OFFLINE_LEAVE_MS) continue;
+        delete meta.name;
+        delete meta.credentials;
+        delete meta.isConnected; // 座位彻底腾空：新入座者不会继承「断线」标记
+        extra.presence.delete(seat);
+        extra.uids.delete(seat); // UID 绑定随座位释放一起清除
+        freed.push(seat);
+      }
+      if (freed.length > 0) {
+        const anyNamed = Object.values(players).some((player) => player?.name);
+        if (anyNamed) await server.db.setMetadata(matchID, metadata);
+        else {
+          await server.db.wipe(matchID);
+          players = undefined;
+        }
+        if (!players) resetEmptyRoomState(extra);
+        console.log(
+          `房间 ${matchID} 座位 ${freed.map((seat) => Number(seat) + 1).join('、')} 断线超过 ${OFFLINE_LEAVE_MS / 1000} 秒，已按退出房间处理`,
+        );
+      }
+    }
+
+    // 3) 空房间留存与到期销毁
+    if (inProgress) {
+      extra.emptySince = null; // 对局进行中：等玩家回来，不销毁
+    } else if (hasPresentSeated(players)) {
+      extra.emptySince = null;
+    } else {
+      if (extra.emptySince === null) {
+        extra.emptySince = now;
+        console.log(`房间 ${matchID} 已空置，留存 ${RETAIN_EMPTY_MS / 1000} 秒等待重新进入`);
+      }
+      // 房里已无对局（如全员断线被释放、房主重开后没回来）：复位开局状态与房主，等人回来重新推得
+      if (!players) resetEmptyRoomState(extra);
+      if (now - extra.emptySince >= RETAIN_EMPTY_MS) {
+        roomExtras.delete(matchID);
+        if (players) await server.db.wipe(matchID);
+        console.log(`房间 ${matchID} 空置超过 ${RETAIN_EMPTY_MS / 1000} 秒，已销毁（房间码失效）`);
+        continue;
+      }
+    }
+
+    // 4) AI 托管代打
+    if (inProgress && players && metadata) {
+      await runAiTakeover(matchID, extra, players, master!, metadata.gameName);
+    }
+  }
 }
 
 server

@@ -94,6 +94,30 @@ export function verifyPassword(password: string, record: { salt: string; hash: s
   return timingSafeEqual(expected, actual);
 }
 
+/** 用户名不存在时的哑哈希盐：只为消耗同等 CPU，不用于校验 */
+const DUMMY_SALT = 'blades-and-rose:dummy-salt';
+
+/**
+ * 抹平「用户名是否存在」的时序差异：用户不存在时也跑一次同开销的 scrypt，
+ * 否则短路返回比密码错误快得多，可被用来枚举已注册用户名。
+ */
+function burnPasswordTime(password: string): void {
+  scryptSync(password, DUMMY_SALT, KEY_LENGTH);
+}
+
+/**
+ * 保留的游客发号记录上限。
+ * 游客号只用于「重启后不重复发号」，无需永久留档；超出上限时从最旧开始淘汰，
+ * 避免 accounts.json 随公网访问量无限增长（被淘汰的号在极小概率下可能重发，
+ * 但被淘汰的都是很久以前发出的号，其持有者的座位绑定早随房间清空而失效）。
+ */
+export const MAX_GUEST_RECORDS = 10_000;
+
+/** 只保留最近的游客发号记录（纯函数，写入与解析共用） */
+export function trimGuests(guests: string[]): string[] {
+  return guests.length <= MAX_GUEST_RECORDS ? guests : guests.slice(-MAX_GUEST_RECORDS);
+}
+
 // ---------------------------------------------------------------- 账号表结构
 
 export interface AccountRecord {
@@ -149,8 +173,12 @@ export function parseAccountFile(text: string | null): { file: AccountFile; warn
     return { file: emptyAccountFile(), warning: '账号文件结构不符，已按空表启动' };
   }
   const accounts = data.accounts.filter(isAccountRecord);
-  const guests = data.guests.filter((uid): uid is string => typeof uid === 'string' && uidKind(uid) === 'guest');
-  const dropped = accounts.length !== data.accounts.length || guests.length !== data.guests.length;
+  const validGuests = data.guests.filter(
+    (uid): uid is string => typeof uid === 'string' && uidKind(uid) === 'guest',
+  );
+  const guests = trimGuests(validGuests);
+  // 「跳过非法条目」的提示只针对脏数据；裁剪旧发号记录属正常操作，不算告警
+  const dropped = accounts.length !== data.accounts.length || validGuests.length !== data.guests.length;
   return { file: { version: 1, accounts, guests }, warning: dropped ? '账号文件里有非法条目，已跳过' : null };
 }
 
@@ -201,13 +229,14 @@ export class AccountStore {
     return this.file.accounts.length;
   }
 
-  /** 给新访客发一个 10 位 UID；发号即落盘，避免重启后重复发放 */
+  /** 给新访客发一个 10 位 UID；发号即落盘，避免重启后重复发放（记录只保留最近 MAX_GUEST_RECORDS 条） */
   allocateGuestUid(): string {
     const uid = randomUid('guest', (candidate) => this.isTaken(candidate));
-    this.file.guests.push(uid);
+    const previous = this.file.guests;
+    this.file.guests = trimGuests([...previous, uid]);
     if (!this.persist()) {
       // 落盘失败不阻断访客使用：本次进程内 UID 依旧唯一，仅重启后有小概率重发
-      this.file.guests.pop();
+      this.file.guests = previous;
     }
     return uid;
   }
@@ -246,8 +275,12 @@ export class AccountStore {
       return { ok: false, status: 400, error: '请输入用户名与密码' };
     }
     const record = this.findByName(name);
-    // 用户不存在与密码错误统一文案，避免枚举账号
-    if (!record || !verifyPassword(password, record)) {
+    // 用户不存在与密码错误统一文案（防账号枚举），且都跑一次同开销的哈希（防时序枚举）
+    if (!record) {
+      burnPasswordTime(password);
+      return { ok: false, status: 401, error: '用户名或密码错误' };
+    }
+    if (!verifyPassword(password, record)) {
       return { ok: false, status: 401, error: '用户名或密码错误' };
     }
     return { ok: true, record };

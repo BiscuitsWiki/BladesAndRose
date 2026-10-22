@@ -195,16 +195,17 @@ describe('扩充 5 号：同出（trioPlay）', () => {
     ]);
   });
 
-  it('池为空时可选 0 人：集合只剩自己（若有牌）', () => {
+  it('池为空时自动结算：集合只剩自己（若有牌），不进入目标选择', () => {
     const t = clone(game({ crystals: { 0: 5 } }));
     t.players.forEach((pl, i) => {
       if (i !== 0) pl.hand = [];
     });
     const s = open(t);
-    expect(s.phase).toBe('magicTargets');
-    const done = applyMove(s, { type: 'resolveMagicTargets', playerId: 'p0', targets: [] });
-    expect(done.modifiers.trio).toEqual(['p0']);
-    expect(done.playOrder).toEqual(['p0']);
+    // 目标池为空时按空目标自动结算，不再等待玩家确认（否则会卡在目标选择）
+    expect(s.phase).toBe('play');
+    expect(s.pendingMagic).toBeNull();
+    expect(s.modifiers.trio).toEqual(['p0']);
+    expect(s.playOrder).toEqual(['p0']);
   });
 
   it('自己无手牌则不进集合', () => {
@@ -222,11 +223,10 @@ describe('扩充 5 号：同出（trioPlay）', () => {
       pl.hand = [];
     });
     const s = open(t);
-    const done = applyMove(s, { type: 'resolveMagicTargets', playerId: 'p0', targets: [] });
-    // 集合为空 → 无人出牌轮：直接结算并进入下一轮
-    expect(done.lastReveal!.outcome).toBe('noCards');
-    expect(done.log.some((l) => l.includes('无人可以出牌'))).toBe(true);
-    expect(done.round).toBe(2);
+    // 空目标自动结算 → 集合为空即无人出牌轮：直接结算并进入下一轮
+    expect(s.lastReveal!.outcome).toBe('noCards');
+    expect(s.log.some((l) => l.includes('无人可以出牌'))).toBe(true);
+    expect(s.round).toBe(2);
   });
 });
 

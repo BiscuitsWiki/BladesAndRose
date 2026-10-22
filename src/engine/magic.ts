@@ -36,10 +36,16 @@ export function resolveTargetsForSpec(
       return { need: 1, pool: all };
     case 'oneOther':
       return { need: 1, pool: others };
-    case 'oneOtherWithCards':
-      return { need: 1, pool: others.filter((id) => hasCards(state, id)) };
-    case 'twoOthersWithCards':
-      return { need: 2, pool: others.filter((id) => hasCards(state, id)) };
+    case 'oneOtherWithCards': {
+      // 必选数按目标池收敛：手牌随对局枯竭，池不足时若仍要求足额目标，
+      // magicTargets 阶段会没有任何合法动作，对局永久卡死
+      const pool = others.filter((id) => hasCards(state, id));
+      return { need: Math.min(1, pool.length), pool };
+    }
+    case 'twoOthersWithCards': {
+      const pool = others.filter((id) => hasCards(state, id));
+      return { need: Math.min(2, pool.length), pool };
+    }
     case 'oneOrTwoOthersWithCards': {
       // 扩充 5 号：可选数 = min(2, 池大小)（≥2 必选 2；=1 选 1；=0 无可选）
       const pool = others.filter((id) => hasCards(state, id));
