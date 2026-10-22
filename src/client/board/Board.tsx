@@ -13,6 +13,7 @@ import { canRandomPlay, canResolveRedraw, handActions } from '../boardActions';
 import { COIN_FLIGHT_MS, CRYSTAL_PULSE_MS, TURN_PULSE_MS, planAnims, type AnimSnapshot } from '../anims';
 import { BudMark, ClosedEyeMark, CrystalHex, OpenEyeMark } from '../artwork';
 import { CardBack, CardFace, cardLabel } from '../cards';
+import { HOTSEAT_DEBUG } from '../debug';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
 import { seatLayout, seatVisualOf, type SeatZone } from '../scene';
@@ -758,8 +759,8 @@ export function Board({
       <div className={`panel progress${isMyTurn ? ' me' : ''}`}>
         <div className="panel-head">
           <h2>游戏进程</h2>
-          {/* 联机模式下的重开由房主在顶栏操作（多人模式下本地 reset 无效） */}
-          {!online && (
+          {/* 联机模式下的重开由房主在顶栏操作（多人模式下本地 reset 无效）；热座调试关闭时不显示 */}
+          {!online && HOTSEAT_DEBUG && (
             <button
               className="btn small"
               onClick={() => {

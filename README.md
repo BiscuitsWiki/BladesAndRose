@@ -1,6 +1,6 @@
 # 《血与刃的白蔷薇》线上版
 
-在线身份推理桌游的网页实现：**纯 TypeScript 规则引擎**（零框架依赖）+ **React 客户端** + **房间服务器**，支持 5–10 人的单页热座与联机对局。
+在线身份推理桌游的网页实现：**纯 TypeScript 规则引擎**（零框架依赖）+ **React 客户端** + **房间服务器**，支持 5–10 人的联机对局与单页热座（仅开发调试）。
 
 ## 特性
 
@@ -14,7 +14,7 @@
 
 ```bash
 npm install
-npm run dev         # 前端开发服务器 http://localhost:5173
+npm run dev         # 前端开发服务器 http://localhost:5173（含热座调试入口）
 npm run dev:server  # 房间服务器 http://localhost:8000（联机多开测试；源码改动自动重启）
 npm test            # 运行全部测试（Vitest）
 npm run typecheck   # tsc --noEmit
@@ -22,6 +22,8 @@ npm run build       # 类型检查 + 生产构建（tsc + vite build）
 ```
 
 联机：进入页面创建 / 加入房间，把含房间号与配比的链接发给其他人即可（同一房间需相同人数与配比）。
+
+> 单页热座是**开发调试工具**（单窗口切换全部视角），由构建开关门控：仅 `npm run dev` 可见，生产构建不渲染热座入口、URL hash 直入热座也会回落大厅。
 
 ## 目录结构
 

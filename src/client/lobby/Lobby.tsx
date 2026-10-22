@@ -11,7 +11,8 @@ import { HallEmblem } from '../artwork';
 import { AccountBar } from '../AccountBar';
 import { DistributionEditor } from './DistributionEditor';
 import { LoadoutChips, loadoutSummary } from '../LoadoutChips';
-import { isOfficialDistribution } from '../distribution';
+import { HOTSEAT_DEBUG } from '../debug';
+import { PLAYER_COUNTS, isOfficialDistribution } from '../distribution';
 import { type LocalAccount } from '../account';
 import {
   createRoom,
@@ -21,8 +22,6 @@ import {
   newRoomCode,
   saveNickname,
 } from '../room';
-
-export const PLAYER_COUNTS = [5, 6, 7, 8, 9, 10];
 
 export function Lobby({
   initialCount,
@@ -134,7 +133,9 @@ export function Lobby({
         <HallEmblem />
         <h1>血与刃的白蔷薇</h1>
         <p className="dim">
-          本地热座验证：先选人数与座位进入对局，之后用顶部的「当前视角」切换座位。
+          {HOTSEAT_DEBUG
+            ? '本地热座验证：先选人数与座位进入对局，之后用顶部的「当前视角」切换座位。'
+            : '创建或加入房间，把链接发给其他玩家即可联机对局。'}
         </p>
       </header>
       <AccountBar account={account} onAccountChange={onAccountChange} onResume={onResume} />
@@ -173,41 +174,43 @@ export function Lobby({
         />
       </section>
 
-      <section className="lobby-sec">
-        <h2>3 · 本地热座（调试）</h2>
-        <div className="actions">
-          <span className="dim">技能组：</span>
-          {LOADOUT_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              className={`btn small${sameLoadout(loadout, preset.loadout) ? ' primary' : ''}`}
-              title={`${preset.name}技能表：${loadoutSummary(preset.loadout)}`}
-              onClick={() => onLoadoutChange(preset.loadout)}
-            >
-              {preset.name}
-            </button>
-          ))}
-          <span className="dim">（仅对本地热座生效；联机对局采用房内技能组）</span>
-        </div>
-        <LoadoutChips loadout={loadout} />
-        <div className="actions">
-          {Array.from({ length: count }, (_, i) => (
-            <button
-              key={i}
-              className="btn"
-              disabled={error !== null}
-              onClick={() => onPick(count, distribution, String(i), null, null, '')}
-            >
-              座位 {i + 1}
-            </button>
-          ))}
-          {error && <span className="warn">配比非法，无法开始</span>}
-        </div>
-        <p className="dim">单窗口完成所有座位的操作，仅用于本地规则调试；联机对局请用下面的房间入口。</p>
-      </section>
+      {HOTSEAT_DEBUG && (
+        <section className="lobby-sec">
+          <h2>3 · 本地热座（调试）</h2>
+          <div className="actions">
+            <span className="dim">技能组：</span>
+            {LOADOUT_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                className={`btn small${sameLoadout(loadout, preset.loadout) ? ' primary' : ''}`}
+                title={`${preset.name}技能表：${loadoutSummary(preset.loadout)}`}
+                onClick={() => onLoadoutChange(preset.loadout)}
+              >
+                {preset.name}
+              </button>
+            ))}
+            <span className="dim">（仅对本地热座生效；联机对局采用房内技能组）</span>
+          </div>
+          <LoadoutChips loadout={loadout} />
+          <div className="actions">
+            {Array.from({ length: count }, (_, i) => (
+              <button
+                key={i}
+                className="btn"
+                disabled={error !== null}
+                onClick={() => onPick(count, distribution, String(i), null, null, '')}
+              >
+                座位 {i + 1}
+              </button>
+            ))}
+            {error && <span className="warn">配比非法，无法开始</span>}
+          </div>
+          <p className="dim">单窗口完成所有座位的操作，仅用于本地规则调试；联机对局请用下面的房间入口。</p>
+        </section>
+      )}
 
       <section className="lobby-sec">
-        <h2>4 · 联机房间</h2>
+        <h2>{HOTSEAT_DEBUG ? '4' : '3'} · 联机房间</h2>
         <div className="actions">
           <input
             className="room-input"

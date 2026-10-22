@@ -8,7 +8,6 @@ import {
   distributionSignature,
   loadoutSignature,
   officialDistribution,
-  parseDistribution,
   validateDistribution,
   type Distribution,
   type GameState,
@@ -17,8 +16,9 @@ import {
 import { Board } from './board/Board';
 import { ensureGuestAccount, loadAccount, type LocalAccount } from './account';
 import { CopyButton, PencilIcon, copyTextToClipboard } from './CopyButton';
+import { HOTSEAT_DEBUG, parseHash } from './debug';
 import { isOfficialDistribution } from './distribution';
-import { Lobby, PLAYER_COUNTS } from './lobby/Lobby';
+import { Lobby } from './lobby/Lobby';
 import { distributionOfGameName, gameNameOf, getBladesAndRose } from './game';
 import { RoomPanel } from './room/RoomPanel';
 import {
@@ -39,24 +39,6 @@ import {
   type ActiveGame,
   type RoomInfo,
 } from './room';
-
-function readHash() {
-  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  const players = Number(params.get('players'));
-  const spectate = params.get('spectate') === '1';
-  const seat = params.get('seat');
-  const room = (params.get('room') ?? '').trim() || null;
-  const dist = parseDistribution(params.get('d') ?? '');
-  /** 逃生阀：带 lobby=1 时即使有进行中的对局也留在大厅（调试用；进入房间后自然清掉） */
-  const forceLobby = params.get('lobby') === '1';
-  // 配比非法（合计不符、白蔷薇/暗刃不为 1 等）时不直接进对局，回落到大厅重新编辑
-  const distValid = dist === null || validateDistribution(dist, players) === null;
-  const seatValid =
-    seat !== null && seat !== '' && Number(seat) >= 0 && Number(seat) < players;
-  const valid =
-    PLAYER_COUNTS.includes(players) && (spectate ? room !== null : seatValid) && distValid;
-  return { players, seat: spectate ? null : seat, room, dist, valid, forceLobby };
-}
 
 function buildHash(
   count: number,
@@ -88,14 +70,15 @@ interface SetupState {
 }
 
 export function App() {
-  const initial = useMemo(readHash, []);
+  const initial = useMemo(() => parseHash(window.location.hash, HOTSEAT_DEBUG), []);
   /** 「主页」状态（无 room、无 seat、未强制大厅）：先查有没有进行中的对局，再决定进房间还是留在大厅 */
   const needsResumeCheck = initial.room === null && initial.seat === null && !initial.forceLobby;
   const [checkingGame, setCheckingGame] = useState(needsResumeCheck);
   /** 本机身份（游客 / 专属账号）；服务器不可用时为 null，不阻塞大厅使用 */
   const [account, setAccount] = useState<LocalAccount | null>(loadAccount);
   const [setup, setSetup] = useState<SetupState>(() => {
-    if (initial.valid && initial.room === null) {
+    // 热座直入仅调试开启时放行（parseHash 已判无效，这里是双保险）
+    if (initial.valid && initial.room === null && HOTSEAT_DEBUG) {
       return {
         count: initial.players,
         distribution: initial.dist ?? officialDistribution(initial.players),
@@ -441,6 +424,7 @@ export function App() {
           );
         }}
         onPick={(count, distribution, seat, room, credentials, nickname) => {
+          if (room === null && !HOTSEAT_DEBUG) return; // 热座调试关闭时防御性拦截
           window.history.replaceState(null, '', buildHash(count, seat, distribution, room));
           setRoomInfo(null); // 进新房间先丢掉旧房间信息，避免沿用旧的「已开局」状态
           setLobbyNotice(null);
@@ -641,21 +625,25 @@ export function App() {
             <span className="dim">
               {setup.count} 人局{official ? '（官方配比）' : '（自定义配比）'}
             </span>
-            <span className="seats">
-              <span className="dim">当前视角：</span>
-              {Array.from({ length: setup.count }, (_, i) => (
-                <button
-                  key={i}
-                  className={`btn small${setup.seat === String(i) ? ' primary' : ''}`}
-                  onClick={() => switchSeat(String(i))}
-                >
-                  座位 {i + 1}
+            {HOTSEAT_DEBUG && (
+              <>
+                <span className="seats">
+                  <span className="dim">当前视角：</span>
+                  {Array.from({ length: setup.count }, (_, i) => (
+                    <button
+                      key={i}
+                      className={`btn small${setup.seat === String(i) ? ' primary' : ''}`}
+                      onClick={() => switchSeat(String(i))}
+                    >
+                      座位 {i + 1}
+                    </button>
+                  ))}
+                </span>
+                <button className="btn" onClick={() => setSetup((prev) => ({ ...prev, inGame: false }))}>
+                  重设
                 </button>
-              ))}
-            </span>
-            <button className="btn" onClick={() => setSetup((prev) => ({ ...prev, inGame: false }))}>
-              重设
-            </button>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -748,10 +736,12 @@ export function App() {
             。房间号 {setup.room}；房主为创建房间的玩家，可在座位面板转移房主。
           </>
         ) : (
-          <>
-            单页热座：同一局里切换「当前视角」即可替不同座位行动，界面只会渲染该座位能看到的
-            <code>playerView</code>。切换时请让其他玩家回避。
-          </>
+          HOTSEAT_DEBUG && (
+            <>
+              单页热座：同一局里切换「当前视角」即可替不同座位行动，界面只会渲染该座位能看到的
+              <code>playerView</code>。切换时请让其他玩家回避。
+            </>
+          )
         )}
       </p>
       {setup.room !== null && roomInfo !== null && (
