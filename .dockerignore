@@ -3,6 +3,7 @@ dist
 data
 .trae
 .vscode
+.env
 *.md
 e2e-*.mjs
 tmp-*.mts

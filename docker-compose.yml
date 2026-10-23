@@ -14,6 +14,9 @@ services:
       - "8082:8000"
     environment:
       - PORT=8000
+      # 开发者邀请码（解锁本地热座调试）：真实值放服务器 /opt/bar/.env（BLADES_DEV_INVITE=...），
+      # 这里只透传，绝不写进仓库；未配置时开发者注册不开放
+      - BLADES_DEV_INVITE=${BLADES_DEV_INVITE}
     volumes:
       # 账号表落盘目录（data/accounts.json）：容器重建不丢账号
       - bar_data:/app/data
