@@ -1,12 +1,16 @@
 /**
- * 大厅顶部的身份条：显示当前玩家身份（游客 / 专属账号）与 UID，
+ * 大厅顶部的身份条：显示当前玩家身份（游客 / 专属账号 / 开发者账号）与 UID，
  * 并提供注册、登录、退出登录与复制 UID。注册 / 登录用内联小表单，不做弹窗。
+ * 注册表单带选填「邀请码」：填了走开发者账号注册（8 位 UID，解锁本地热座调试）。
  *
  * 身份条只负责「账号」这一层：座位与对局的接管在 App.tsx / room.ts 里完成。
  */
 import { useState } from 'react';
 import {
   clearAccount,
+  clearDevToken,
+  devLogout,
+  devRegister,
   ensureGuestAccount,
   loginAccount,
   registerAccount,
@@ -72,6 +76,8 @@ export function AccountBar({
   const [mode, setMode] = useState<'idle' | 'register' | 'login'>('idle');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  /** 开发者邀请码（选填）：填了即注册开发者账号 */
+  const [invite, setInvite] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -90,6 +96,7 @@ export function AccountBar({
     setMode(next);
     setError(null);
     setPassword('');
+    setInvite('');
   }
 
   async function submit() {
@@ -98,7 +105,9 @@ export function AccountBar({
     try {
       const next =
         mode === 'register'
-          ? await registerAccount(username, password)
+          ? invite.trim() !== ''
+            ? await devRegister(invite.trim(), username, password)
+            : await registerAccount(username, password)
           : await loginAccount(username, password);
       onAccountChange(next);
       // 昵称为空时默认填用户名（不覆盖已经填过的昵称）
@@ -115,6 +124,8 @@ export function AccountBar({
 
   async function logout() {
     clearAccount();
+    clearDevToken(); // 登出即锁定热座调试
+    void devLogout(); // 通知服务器吊销授权（失败不阻断本地清理）
     setMode('idle');
     setError(null);
     try {
@@ -129,6 +140,7 @@ export function AccountBar({
     <div className="account-bar">
       <span className="uid-chip">
         <span>{account === null ? '未取得玩家身份（账号服务器不可用）' : uidLabel(account)}</span>
+        {account?.kind === 'dev' && <span className="chip">开发者</span>}
         {account !== null && (
           <button
             type="button"
@@ -152,7 +164,7 @@ export function AccountBar({
           <span className="dim">注册后可用用户名 + 密码在任意设备找回身份与未打完的对局</span>
         </>
       )}
-      {account !== null && account.kind === 'account' && mode === 'idle' && (
+      {account !== null && account.kind !== 'guest' && mode === 'idle' && (
         <button className="btn small" onClick={() => void logout()}>
           退出登录
         </button>
@@ -177,6 +189,18 @@ export function AccountBar({
               if (e.key === 'Enter') void submit();
             }}
           />
+          {mode === 'register' && (
+            <input
+              className="room-input"
+              placeholder="邀请码（选填：填写则注册开发者账号）"
+              value={invite}
+              maxLength={64}
+              onChange={(e) => setInvite(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit();
+              }}
+            />
+          )}
           <button className="btn small primary" disabled={busy} onClick={() => void submit()}>
             {busy ? '处理中…' : mode === 'register' ? '注册' : '登录'}
           </button>

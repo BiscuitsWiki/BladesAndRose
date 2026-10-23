@@ -36,6 +36,18 @@ export interface HashState {
   forceLobby: boolean;
 }
 
+/** 开发者授权门控状态：checking = 正在向服务器复核本机授权 */
+export type DevGate = 'checking' | 'unlocked' | 'locked';
+
+/**
+ * 门控初值（纯函数）：开发模式直接解锁；本地存有开发者授权时先向服务器复核（checking）；否则锁定。
+ * 生产构建里热座 = 构建开关 OR 开发者授权，授权由服务器签发（登录开发者账号获得）。
+ */
+export function resolveDevGate(input: { hotseatDebug: boolean; hasToken: boolean }): DevGate {
+  if (input.hotseatDebug) return 'unlocked';
+  return input.hasToken ? 'checking' : 'locked';
+}
+
 /**
  * 解析 URL hash（纯函数）。
  * 热座调试关闭时，热座 hash（不带 room）一律判为无效，回落大厅重新编辑。
@@ -58,4 +70,13 @@ export function parseHash(hash: string, hotseatDebug: boolean): HashState {
     // 热座（无 room）仅调试开启时有效：生产构建拒绝 hash 直入热座
     (room !== null || hotseatDebug);
   return { players, seat: spectate ? null : seat, room, dist, valid, forceLobby };
+}
+
+/**
+ * hash 是否指向「热座直入」（无 room 且按调试开启口径解析有效）。
+ * 生产构建的初始解析不会放行热座，开发者授权解锁后由启动效果据此延后放行。
+ */
+export function hashTargetsHotseat(hash: string): boolean {
+  const state = parseHash(hash, true);
+  return state.valid && state.room === null;
 }

@@ -11,7 +11,6 @@ import { HallEmblem } from '../artwork';
 import { AccountBar } from '../AccountBar';
 import { DistributionEditor } from './DistributionEditor';
 import { LoadoutChips, loadoutSummary } from '../LoadoutChips';
-import { HOTSEAT_DEBUG } from '../debug';
 import { PLAYER_COUNTS, isOfficialDistribution } from '../distribution';
 import { type LocalAccount } from '../account';
 import {
@@ -30,6 +29,7 @@ export function Lobby({
   notice,
   account,
   loadout,
+  hotseatAllowed,
   onLoadoutChange,
   onAccountChange,
   onResume,
@@ -40,10 +40,12 @@ export function Lobby({
   initialRoom: string | null;
   /** 从房间页退回大厅时的提示（房间已销毁等） */
   notice?: string;
-  /** 本机身份（游客 / 专属账号），显示在大厅顶部 */
+  /** 本机身份（游客 / 专属账号 / 开发者），显示在大厅顶部 */
   account: LocalAccount | null;
   /** 热座技能组（联机对局采用房内技能组，与此无关） */
   loadout: SkillLoadout;
+  /** 热座调试是否可用（构建开关 OR 开发者授权）：关闭时不渲染本地热座入口 */
+  hotseatAllowed: boolean;
   onLoadoutChange: (loadout: SkillLoadout) => void;
   onAccountChange: (account: LocalAccount | null) => void;
   /** 注册 / 登录成功：查一查该 UID 有没有进行中的对局，有就拉回 */
@@ -133,7 +135,7 @@ export function Lobby({
         <HallEmblem />
         <h1>血与刃的白蔷薇</h1>
         <p className="dim">
-          {HOTSEAT_DEBUG
+          {hotseatAllowed
             ? '本地热座验证：先选人数与座位进入对局，之后用顶部的「当前视角」切换座位。'
             : '创建或加入房间，把链接发给其他玩家即可联机对局。'}
         </p>
@@ -174,7 +176,7 @@ export function Lobby({
         />
       </section>
 
-      {HOTSEAT_DEBUG && (
+      {hotseatAllowed && (
         <section className="lobby-sec">
           <h2>3 · 本地热座（调试）</h2>
           <div className="actions">
@@ -210,7 +212,7 @@ export function Lobby({
       )}
 
       <section className="lobby-sec">
-        <h2>{HOTSEAT_DEBUG ? '4' : '3'} · 联机房间</h2>
+        <h2>{hotseatAllowed ? '4' : '3'} · 联机房间</h2>
         <div className="actions">
           <input
             className="room-input"

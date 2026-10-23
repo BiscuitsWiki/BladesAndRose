@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { distributionSignature, type Distribution } from '../../engine';
-import { parseHash, resolveHotseatDebug } from '../debug';
+import { hashTargetsHotseat, parseHash, resolveDevGate, resolveHotseatDebug } from '../debug';
 
 describe('热座调试门控', () => {
   it('开关默认跟随 dev，override 优先', () => {
@@ -8,6 +8,13 @@ describe('热座调试门控', () => {
     expect(resolveHotseatDebug({ dev: false })).toBe(false);
     expect(resolveHotseatDebug({ dev: false, override: true })).toBe(true);
     expect(resolveHotseatDebug({ dev: true, override: false })).toBe(false);
+  });
+
+  it('门控初值：开发模式直接解锁；有本地授权先复核；否则锁定', () => {
+    expect(resolveDevGate({ hotseatDebug: true, hasToken: false })).toBe('unlocked');
+    expect(resolveDevGate({ hotseatDebug: true, hasToken: true })).toBe('unlocked');
+    expect(resolveDevGate({ hotseatDebug: false, hasToken: true })).toBe('checking');
+    expect(resolveDevGate({ hotseatDebug: false, hasToken: false })).toBe('locked');
   });
 
   it('调试关闭时热座 hash（无 room）判为无效，回落大厅', () => {
@@ -55,5 +62,14 @@ describe('热座调试门控', () => {
     for (const debug of [true, false]) {
       expect(parseHash('#lobby=1', debug).forceLobby).toBe(true);
     }
+  });
+
+  it('hashTargetsHotseat 只认「无 room 且解析有效」的热座直入', () => {
+    expect(hashTargetsHotseat('#players=5&seat=0')).toBe(true);
+    expect(hashTargetsHotseat('#players=6&seat=0&room=TEST1')).toBe(false); // 联机
+    expect(hashTargetsHotseat('#players=6&spectate=1&room=TEST1')).toBe(false); // 观战
+    expect(hashTargetsHotseat('#players=4&seat=0')).toBe(false); // 人数非法
+    expect(hashTargetsHotseat('')).toBe(false);
+    expect(hashTargetsHotseat('#lobby=1')).toBe(false);
   });
 });

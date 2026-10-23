@@ -14,9 +14,15 @@ import {
   type SkillLoadout,
 } from '../engine';
 import { Board } from './board/Board';
-import { ensureGuestAccount, loadAccount, type LocalAccount } from './account';
+import {
+  devCheck,
+  ensureGuestAccount,
+  loadAccount,
+  loadDevToken,
+  type LocalAccount,
+} from './account';
 import { CopyButton, PencilIcon, copyTextToClipboard } from './CopyButton';
-import { HOTSEAT_DEBUG, parseHash } from './debug';
+import { HOTSEAT_DEBUG, hashTargetsHotseat, parseHash, resolveDevGate, type DevGate } from './debug';
 import { isOfficialDistribution } from './distribution';
 import { Lobby } from './lobby/Lobby';
 import { distributionOfGameName, gameNameOf, getBladesAndRose } from './game';
@@ -74,11 +80,19 @@ export function App() {
   /** 「主页」状态（无 room、无 seat、未强制大厅）：先查有没有进行中的对局，再决定进房间还是留在大厅 */
   const needsResumeCheck = initial.room === null && initial.seat === null && !initial.forceLobby;
   const [checkingGame, setCheckingGame] = useState(needsResumeCheck);
+  /**
+   * 开发者授权门控：热座 = 构建开关 OR 登录开发者账号（授权由服务器签发、7 天有效）。
+   * 本地存有授权时先向服务器复核（checking 期间闪屏、不可交互），复核通过才解锁。
+   */
+  const [devGate, setDevGate] = useState<DevGate>(() =>
+    resolveDevGate({ hotseatDebug: HOTSEAT_DEBUG, hasToken: loadDevToken() !== null }),
+  );
+  const hotseatAllowed = HOTSEAT_DEBUG || devGate === 'unlocked';
   /** 本机身份（游客 / 专属账号）；服务器不可用时为 null，不阻塞大厅使用 */
   const [account, setAccount] = useState<LocalAccount | null>(loadAccount);
   const [setup, setSetup] = useState<SetupState>(() => {
-    // 热座直入仅调试开启时放行（parseHash 已判无效，这里是双保险）
-    if (initial.valid && initial.room === null && HOTSEAT_DEBUG) {
+    // 热座直入仅调试开启时放行（parseHash 已判无效，这里是双保险）；开发者授权解锁的直入见下方启动效果
+    if (initial.valid && initial.room === null && hotseatAllowed) {
       return {
         count: initial.players,
         distribution: initial.dist ?? officialDistribution(initial.players),
@@ -344,6 +358,56 @@ export function App() {
   }, []);
 
   /**
+   * 开发者授权复核：本地存有授权时向服务器确认（过期 / 吊销 / 删号则锁定热座）。
+   * 复核期间 devGate 为 checking，闪屏保持、界面不可交互。
+   */
+  useEffect(() => {
+    if (devGate !== 'checking') return;
+    let alive = true;
+    void devCheck().then((ok) => {
+      if (alive) setDevGate(ok ? 'unlocked' : 'locked');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [devGate]);
+
+  /**
+   * 登录 / 登出即时联动门控：开发者账号登录 / 注册成功（服务器刚签发并保存了授权）即解锁，
+   * 退出登录即锁定。只处理 locked → unlocked：启动时的解锁仍以服务器复核（上方 devCheck）为准，
+   * 本机缓存的身份不会绕过服务器校验。
+   */
+  useEffect(() => {
+    if (account?.kind === 'dev' && loadDevToken() !== null) {
+      setDevGate((gate) => (gate === 'locked' ? 'unlocked' : gate));
+    } else if (!HOTSEAT_DEBUG) {
+      setDevGate((gate) => (gate === 'checking' ? gate : 'locked'));
+    }
+  }, [account]);
+
+  /**
+   * 开发者授权解锁后放行 hash 直入热座：生产构建的初始解析不放行热座，
+   * 这里在授权复核通过后延后落定（全程处于闪屏内，无闪烁）。
+   * 开发模式不走这里（初始解析已放行）。
+   */
+  useEffect(() => {
+    if (devGate !== 'unlocked' || HOTSEAT_DEBUG || setup.inGame) return;
+    const hash = window.location.hash;
+    const state = parseHash(hash, true);
+    if (!hashTargetsHotseat(hash) || !state.valid) return;
+    setSetup({
+      count: state.players,
+      distribution: state.dist ?? officialDistribution(state.players),
+      seat: state.seat,
+      room: null,
+      credentials: null,
+      nickname: '',
+      inGame: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devGate]);
+
+  /**
    * 热座「当前视角」切换时**重建 client**，而不是用 boardgame.io 的 updatePlayerID：
    * Local() 传输器按 playerID 累积回调且永不注销，master 的 sendAll 会把同一份状态给
    * 所有访问过的座位各发一份、最后由「座位号最大者」覆盖写入同一个 store——于是状态一推进，
@@ -382,6 +446,8 @@ export function App() {
         spectating?: boolean;
         /** 服务器下发的座位在线状态（联机才有；null 时 Board 回退到 matchData 的 isConnected） */
         seatStatus?: { offline: string[]; ai: string[] } | null;
+        /** 热座调试是否可用（构建开关 OR 开发者授权） */
+        hotseatAllowed: boolean;
         /** 「睁眼」标注（按视角各记一份，App 层持有，见上） */
         eyeMarks: Record<string, string[]>;
         setEyeMarks: Dispatch<SetStateAction<Record<string, string[]>>>;
@@ -390,7 +456,7 @@ export function App() {
     [setup.count, overrideKey, setup.room, setup.seat, hotseatKey],
   );
 
-  if (checkingGame) {
+  if (checkingGame || devGate === 'checking') {
     return (
       <>
         <div className="topbar">
@@ -399,7 +465,7 @@ export function App() {
         <div className="panel">
           <h2>正在检测进行中的对局…</h2>
           <p className="dim">
-            如果你的账号有未打完的对局，会自动进入房间继续；没有就留在大厅。
+            如果你的账号有未打完的对局，会自动进入房间继续；没有就留在大厅。（同时复核开发者授权）
           </p>
         </div>
       </>
@@ -415,6 +481,7 @@ export function App() {
         notice={lobbyNotice ?? undefined}
         account={account}
         loadout={hotseatLoadout}
+        hotseatAllowed={hotseatAllowed}
         onLoadoutChange={setHotseatLoadout}
         onAccountChange={setAccount}
         onResume={(next) => {
@@ -424,7 +491,7 @@ export function App() {
           );
         }}
         onPick={(count, distribution, seat, room, credentials, nickname) => {
-          if (room === null && !HOTSEAT_DEBUG) return; // 热座调试关闭时防御性拦截
+          if (room === null && !hotseatAllowed) return; // 热座未解锁时防御性拦截
           window.history.replaceState(null, '', buildHash(count, seat, distribution, room));
           setRoomInfo(null); // 进新房间先丢掉旧房间信息，避免沿用旧的「已开局」状态
           setLobbyNotice(null);
@@ -625,7 +692,7 @@ export function App() {
             <span className="dim">
               {setup.count} 人局{official ? '（官方配比）' : '（自定义配比）'}
             </span>
-            {HOTSEAT_DEBUG && (
+            {hotseatAllowed && (
               <>
                 <span className="seats">
                   <span className="dim">当前视角：</span>
@@ -736,7 +803,7 @@ export function App() {
             。房间号 {setup.room}；房主为创建房间的玩家，可在座位面板转移房主。
           </>
         ) : (
-          HOTSEAT_DEBUG && (
+          hotseatAllowed && (
             <>
               单页热座：同一局里切换「当前视角」即可替不同座位行动，界面只会渲染该座位能看到的
               <code>playerView</code>。切换时请让其他玩家回避。
@@ -784,6 +851,7 @@ export function App() {
               ? null
               : { offline: roomInfo.offline, ai: roomInfo.ai ?? [] }
           }
+          hotseatAllowed={hotseatAllowed}
           eyeMarks={eyeMarks}
           setEyeMarks={setEyeMarks}
         />

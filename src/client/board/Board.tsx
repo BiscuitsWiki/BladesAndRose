@@ -13,7 +13,6 @@ import { canRandomPlay, canResolveRedraw, handActions } from '../boardActions';
 import { COIN_FLIGHT_MS, CRYSTAL_PULSE_MS, TURN_PULSE_MS, planAnims, type AnimSnapshot } from '../anims';
 import { BudMark, ClosedEyeMark, CrystalHex, OpenEyeMark } from '../artwork';
 import { CardBack, CardFace, cardLabel } from '../cards';
-import { HOTSEAT_DEBUG } from '../debug';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
 import { seatLayout, seatVisualOf, type SeatZone } from '../scene';
@@ -108,6 +107,7 @@ export function Board({
   spectating,
   matchData,
   seatStatus,
+  hotseatAllowed,
   eyeMarks,
   setEyeMarks,
 }: BoardProps<GameView> & {
@@ -121,6 +121,8 @@ export function Board({
    * 传 null / 不传时（热座或轮询还没回来）回退到 matchData 的 isConnected。
    */
   seatStatus?: { offline: string[]; ai: string[] } | null;
+  /** 热座调试是否可用（构建开关 OR 开发者授权）：关闭时不显示「重开一局」 */
+  hotseatAllowed: boolean;
   /**
    * 「睁眼」标注：公开与否交给玩家在桌上自行交流，界面只提供记录工具。
    * 标注按视角各记一份，只存在于本机状态（不进 GameState、也不下发）；
@@ -759,8 +761,8 @@ export function Board({
       <div className={`panel progress${isMyTurn ? ' me' : ''}`}>
         <div className="panel-head">
           <h2>游戏进程</h2>
-          {/* 联机模式下的重开由房主在顶栏操作（多人模式下本地 reset 无效）；热座调试关闭时不显示 */}
-          {!online && HOTSEAT_DEBUG && (
+          {/* 联机模式下的重开由房主在顶栏操作（多人模式下本地 reset 无效）；热座未解锁时不显示 */}
+          {!online && hotseatAllowed && (
             <button
               className="btn small"
               onClick={() => {

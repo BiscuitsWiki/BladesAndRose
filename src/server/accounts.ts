@@ -2,9 +2,10 @@
  * 玩家账号与 UID。
  *
  * UID 由服务器发放、全局唯一，是玩家的身份标识（识别玩家看 UID，昵称只用于显示）：
+ *   - 开发者账号（邀请码注册）：8 位，10000000 – 99999999（登录后解锁本地热座调试）
  *   - 专属账号（用户名 + 密码注册）：9 位，100000000 – 999999999
  *   - 游客（临时账号，无需注册）：10 位，1000000000 – 9999999999
- * 两段区间按数值划分，判类型时不依赖字符串长度，也不怕带前导零的脏串。
+ * 各段区间按数值划分，判类型时不依赖字符串长度，也不怕带前导零的脏串。
  *
  * 账号表落盘到本地 JSON 文件（默认 data/accounts.json，可用环境变量 BLADES_ACCOUNTS_FILE 覆盖），
  * 服务器重启后账号不丢；房间与对局仍保持「进程内存、重启即清空」的既有做法。
@@ -18,6 +19,9 @@ import path from 'node:path';
 
 // ---------------------------------------------------------------- UID
 
+/** 开发者账号 UID 区间（8 位）：第三类账号，登录后解锁本地热座调试 */
+export const DEV_UID_MIN = 10_000_000;
+export const DEV_UID_MAX = 99_999_999;
 /** 专属账号 UID 区间（9 位） */
 export const ACCOUNT_UID_MIN = 100_000_000;
 export const ACCOUNT_UID_MAX = 999_999_999;
@@ -25,7 +29,7 @@ export const ACCOUNT_UID_MAX = 999_999_999;
 export const GUEST_UID_MIN = 1_000_000_000;
 export const GUEST_UID_MAX = 9_999_999_999;
 
-export type UidKind = 'account' | 'guest';
+export type UidKind = 'dev' | 'account' | 'guest';
 
 /**
  * 判 UID 类型：必须是规范的十进制整数（无前导零、无多余字符）且落在对应区间。
@@ -35,10 +39,17 @@ export function uidKind(uid: string): UidKind | null {
   if (!/^\d+$/.test(uid)) return null;
   const value = Number(uid);
   if (String(value) !== uid) return null; // 拒绝 "012345678" 这类带前导零的写法
+  if (value >= DEV_UID_MIN && value <= DEV_UID_MAX) return 'dev';
   if (value >= ACCOUNT_UID_MIN && value <= ACCOUNT_UID_MAX) return 'account';
   if (value >= GUEST_UID_MIN && value <= GUEST_UID_MAX) return 'guest';
   return null;
 }
+
+/** 各类 UID 的发号区间 */
+const UID_RANGE: Record<Exclude<UidKind, 'guest'>, { min: number; max: number }> = {
+  dev: { min: DEV_UID_MIN, max: DEV_UID_MAX },
+  account: { min: ACCOUNT_UID_MIN, max: ACCOUNT_UID_MAX },
+};
 
 /**
  * 取一个未被占用的 UID（kind 决定区间）；isTaken 用于避开已发出的号。
@@ -49,10 +60,12 @@ export function randomUid(
   isTaken: (uid: string) => boolean,
   next: (min: number, max: number) => number = (min, max) => randomInt(min, max + 1),
 ): string {
-  const min = kind === 'account' ? ACCOUNT_UID_MIN : GUEST_UID_MIN;
-  const max = kind === 'account' ? ACCOUNT_UID_MAX : GUEST_UID_MAX;
+  const range =
+    kind === 'guest'
+      ? { min: GUEST_UID_MIN, max: GUEST_UID_MAX }
+      : UID_RANGE[kind];
   for (let attempt = 0; attempt < 100; attempt++) {
-    const uid = String(next(min, max));
+    const uid = String(next(range.min, range.max));
     if (!isTaken(uid)) return uid;
   }
   throw new Error('UID 分配失败：连续 100 次都撞上已发出的号');
@@ -145,9 +158,9 @@ export function emptyAccountFile(): AccountFile {
 function isAccountRecord(value: unknown): value is AccountRecord {
   if (typeof value !== 'object' || value === null) return false;
   const record = value as Partial<AccountRecord>;
+  const kind = typeof record.uid === 'string' ? uidKind(record.uid) : null;
   return (
-    typeof record.uid === 'string' &&
-    uidKind(record.uid) === 'account' &&
+    (kind === 'account' || kind === 'dev') &&
     typeof record.username === 'string' &&
     typeof record.nameKey === 'string' &&
     typeof record.salt === 'string' &&
@@ -241,7 +254,11 @@ export class AccountStore {
     return uid;
   }
 
-  register(username: string, password: string): StoreResult {
+  /**
+   * 注册用户名 + 密码账号：kind='account' 发 9 位正式 UID，kind='dev' 发 8 位开发者 UID
+   * （dev 需调用方先校验邀请码，见 dev-server 的 /account/dev-register）。
+   */
+  register(username: string, password: string, kind: 'account' | 'dev' = 'account'): StoreResult {
     const name = username.trim();
     if (!validUsername(name)) {
       return { ok: false, status: 400, error: '用户名需 2–16 位中文 / 字母 / 数字 / 下划线' };
@@ -254,7 +271,7 @@ export class AccountStore {
     }
 
     const record: AccountRecord = {
-      uid: randomUid('account', (candidate) => this.isTaken(candidate)),
+      uid: randomUid(kind, (candidate) => this.isTaken(candidate)),
       username: name,
       nameKey: normalizeUsername(name),
       ...hashPassword(password),
@@ -289,6 +306,11 @@ export class AccountStore {
   private findByName(username: string): AccountRecord | undefined {
     const key = normalizeUsername(username);
     return this.file.accounts.find((account) => account.nameKey === key);
+  }
+
+  /** 按 UID 查账号（开发者授权吊销校验用：记录被删即视为吊销） */
+  findByUid(uid: string): AccountRecord | undefined {
+    return this.file.accounts.find((account) => account.uid === uid);
   }
 
   private isTaken(uid: string): boolean {

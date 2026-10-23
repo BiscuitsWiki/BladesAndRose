@@ -8,8 +8,8 @@
 
 - 完成可复现、可测试的**纯规则引擎**（`src/engine`），覆盖 5–10 人局、夜晚阶段、魔法水晶、出牌与结算全流程。
 - 通过**适配层**接入 boardgame.io（`src/client/game.ts`），用其快照与传输能力承载引擎。
-- 提供**单页热座** UI 用于本地验证：大厅可自定义角色配比，牌桌可按座位切换视角，界面只渲染该视角过滤后的信息。热座是**开发调试工具**，由构建开关（`src/client/debug.ts` 的 `import.meta.env.DEV`）门控——仅开发模式（`npm run dev`）可用，生产构建不渲染热座入口、URL hash 直入热座也会被拒绝回落大厅。
-- 提供**玩家 UID 身份**（游客 10 位 / 专属账号 9 位）与联机房间：玩家可凭 UID 收回自己的座位，回到主页时会被自动拉回「进行中」的对局继续游戏。
+- 提供**单页热座** UI 用于本地验证：大厅可自定义角色配比，牌桌可按座位切换视角，界面只渲染该视角过滤后的信息。热座是**开发调试工具**，门控 = **构建开关 OR 开发者授权**（`src/client/debug.ts`）：开发模式（`npm run dev`）直接可用；生产构建须登录**开发者账号**（邀请码注册，服务器签发 7 天授权 token）解锁，未授权时不渲染热座入口、URL hash 直入热座也会被拒绝回落大厅。
+- 提供**玩家 UID 身份**（开发者 8 位 / 专属账号 9 位 / 游客 10 位）与联机房间：玩家可凭 UID 收回自己的座位，回到主页时会被自动拉回「进行中」的对局继续游戏。
 
 本版仍不做：数据库、匹配、聊天。房间与对局状态仅存于进程内存（服务重启即清空）；只有**账号表**落盘在 `data/accounts.json`（见第 5 节）。
 
@@ -198,7 +198,7 @@ magic ──passCoin──► magicTargets ──resolveMagicTargets──► pl
   - 私人信息面板：本人角色、手牌、水晶编号，以及该水晶对应的**技能名称与效果描述**（编号本身只是指针，玩家需要知道效果才能决策）。
   - 操作区：出牌阶段的「跳过」「我要最后行动」与「确认出牌 / 取消」均在手牌面板（选中手牌后确认出牌或取消，未选中时可直接跳过或选择殿后），换牌阶段的「放弃换牌」在玩家区；10 号换牌挂起时，手牌面板的确认按钮变为「确认替换」、玩家行标注「必须换牌」，跳过与「我要最后行动」不可用，步骤文案改用换牌表述；需要指定目标时按 `pendingMagic.targets` 约束过滤可选玩家。
   - 卡牌标记：白蔷薇用白色蔷薇 ✿，司教/信者用花苞 ❀，血刃用 ⚔，互不混淆。
-- **热座限制**：`Local()` 传输器不支持跨标签页同步，因此本地验证采用单页热座——在同一页面切换视角替不同座位行动，切换时其他玩家应回避。热座入口（大厅区块、hash 直入、视角切换 / 重设 / 重开一局）由 `src/client/debug.ts` 的 `HOTSEAT_DEBUG` 门控，仅开发模式可见；测试用纯函数 `resolveHotseatDebug` / `parseHash` 覆盖两种分支（`hotseat-gate.test.ts`）。
+- **热座限制**：`Local()` 传输器不支持跨标签页同步，因此本地验证采用单页热座——在同一页面切换视角替不同座位行动，切换时其他玩家应回避。热座入口（大厅区块、hash 直入、视角切换 / 重设 / 重开一局）由 `src/client/debug.ts` 门控（构建开关 OR 开发者授权，App 派生 `hotseatAllowed` 传入 Lobby / Board）；生产构建里未登录开发者账号即不可见。开发者账号是第三类账号（8 位 UID，邀请码注册），授权 token 由 `src/server/devAuth.ts` 签发（内存 Map、7 天过期、登出 / 删号 / 重启三路吊销）。测试用纯函数 `resolveHotseatDebug` / `resolveDevGate` / `parseHash` / `hashTargetsHotseat` 覆盖各分支（`hotseat-gate.test.ts`、`devAuth.test.ts`）。
   - **切换视角 = 重建 client**（不是 `updatePlayerID`）：boardgame.io 0.50.2 的 Local 传输器按 playerID 累积回调且永不注销，master 的 `sendAll` 会把同一状态给所有访问过的座位各发一份、最后由「座位号最大者」覆盖写入同一个 store——状态一推进，当前视角就可能拿到别人的过滤视图（表现：「你的手牌」面板消失、无法出牌）。重建 client 后过期回调落在已卸载的旧 client 上，当前 client 只收自己的视图（对局不受影响：Local master 按 game 对象缓存，新 client 重新同步到同一局）。回归测试见 `client-smoke.test.ts` 的「热座切换视角」用例。
   - 「睁眼」标注因此提升到 **App 层**持有（Board 会随 client 重建而重挂），切换视角不丢标注。
 - **移动端**：`max-width: 560px` 媒体查询调整页边距、列数、卡牌尺寸与字号；公开结算动画的弹窗与牌尺寸一并压缩（每行 4 张，10 人局 3 行）。
@@ -251,7 +251,8 @@ BladesAndRose/
     │   └── __tests__/adapter.test.ts · client-smoke.test.ts · hotseat-skill-flow.test.ts · board-actions.test.ts · account.test.ts · reveal-anim.test.ts · anims.test.ts · scene.test.ts
     └── server/
         ├── dev-server.ts         # 开发用房间服务器（联机多开测试）
-        ├── accounts.ts           # UID 区间、账号表与落盘（纯逻辑 + 文件区）
+        ├── accounts.ts           # UID 三类区间（dev / account / guest）、账号表与落盘（纯逻辑 + 文件区）
+        ├── devAuth.ts            # 开发者授权：邀请码校验、dev token 签发 / 校验 / 吊销（内存 Map）
         ├── seats.ts              # 座位认领决策与「最近活跃的一局」（纯函数）
         └── __tests__/accounts.test.ts · seats.test.ts
 ```
@@ -268,9 +269,10 @@ BladesAndRose/
 - **按钮逻辑**（`board-actions.test.ts`，12 个）：出牌阶段手牌区按钮的显示与禁用条件（跳过、殿后、确认/取消；10 号换牌挂起、非本回合、观战者、非出牌阶段均不显示），以及玩家区只剩换牌按钮。
 - **客户端冒烟**（`client-smoke.test.ts`，3 个）：建立连接、拿到过滤后的状态、提交动作，以及**热座切换视角后状态推进仍保有自己的视图**（回归 boardgame.io Local 传输器的广播缺陷）。
 - **热座技能释放扫描**（`hotseat-skill-flow.test.ts`，49 个）：用真实 boardgame.io Local 管线把每个水晶技能（初版 + 2025 两套技能组 × 12 槽 × 自己发动 / 传给他人发动）的释放流程逐步走一遍——发动前后当前视角本人必须仍带 `role`/`hand`（「你的手牌」面板的渲染前提）、每一步都有当前行动者且五个座位都在视图里、切换视角按 App 的方式**重建 client**、整轮能靠出牌 / 跳过推进完成（无丢视角、无死锁）；另有一条「行动绑定」发动后仍可出牌 / 跳过的点名回归（历史症状：发动后手牌与版图消失、无法操作）。
-- **玩家身份**（`account.test.ts`，4 个）：UID 类型判定（9 位专属 / 10 位游客 / 脏串与前导零拒绝）与身份文案。
+- **玩家身份**（`account.test.ts`，7 个）：UID 类型判定（8 位开发者 / 9 位专属 / 10 位游客 / 脏串与前导零拒绝）、身份文案与开发者授权解析。
 - **结算动画触发**（`reveal-anim.test.ts`，7 个）：新结算播放、同一轮不重播、新一轮再播、无人出牌不播、重开复位、减弱动效跳过、时长常量（3 + 2 秒）。
-- **账号与座位认领**（`accounts.test.ts` 15 个 + `seats.test.ts` 12 个）：UID 区间边界与撞号重试、用户名/密码校验、加盐哈希与校验、账号文件宽容解析与序列化往返、`AccountStore` 落盘往返（注册 → 重新加载 → 登录拿到同一 UID；游客号不重复发放；坏文件备份为 `.corrupt`）、座位认领决策表逐行、`pickLatestGame` 取最近活跃，以及**座位键校验**（`isSeatKey`：`__proto__` / `constructor` / `prototype` / `toString` 等原型链键一律拒绝，认领时绝不写入原型）。
+- **账号与座位认领**（`accounts.test.ts` 18 个 + `seats.test.ts` 15 个）：UID 三类区间边界与撞号重试、用户名/密码校验、加盐哈希与校验、账号文件宽容解析与序列化往返、`AccountStore` 落盘往返（注册 → 重新加载 → 登录拿到同一 UID；开发者账号发 8 位 UID 且 `findByUid` 可查；游客号限量留存）、座位认领决策表逐行、`pickLatestGame` 取最近活跃，以及**座位键校验**（`isSeatKey`：`__proto__` / `constructor` / `prototype` / `toString` 等原型链键一律拒绝，认领时绝不写入原型）。
+- **开发者授权**（`devAuth.test.ts`，6 个）：邀请码未配置恒拒绝、等时比较边界、token 签发 / 过期 / 逐个与按 UID 吊销、并发签发无重复。
 - **服务器限流**（`rate-limit.test.ts`，6 个）：按 IP 固定窗口——开窗放行、窗口内计数与超限拒绝、剩余等待时间、窗口过期重计、纯函数不改入参、过期窗口清理。
 
 常用命令：

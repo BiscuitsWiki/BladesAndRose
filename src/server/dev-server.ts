@@ -51,6 +51,7 @@ import {
 } from '../engine';
 import { getBladesAndRose } from '../client/game';
 import { AccountStore, uidKind } from './accounts';
+import { DevTokenStore, devInviteValid } from './devAuth';
 import { hitRateWindow, pruneExpired, type RateWindow } from './rateLimit';
 import { decideSeatClaim, emptySeatsOf, pickLatestGame, seatMetaOf } from './seats';
 
@@ -424,6 +425,9 @@ const issuedRoomCodes = new Set<string>();
 
 /** 玩家账号表（落盘 data/accounts.json）；房间与对局仍是内存存储，账号跨重启保留 */
 const accounts = new AccountStore();
+
+/** 开发者授权 token（内存存储，重启即全量失效 = 免费吊销）；解锁本地热座调试用 */
+const devTokens = new DevTokenStore();
 
 /** 生成一条新的座位凭据：boardgame.io 只做字符串相等比较，随机串即可（不轮换，见 seats.ts） */
 function newCredential(): string {
@@ -902,6 +906,12 @@ function registerAccountApi(): void {
     };
   };
 
+  /** dev 账号的注册 / 登录响应：附带解锁热座调试的 token */
+  const devAuthResponse = (record: { uid: string; username: string }) => {
+    const { token, expiresAt } = devTokens.issue(record.uid);
+    return { uid: record.uid, username: record.username, kind: 'dev', token, expiresAt };
+  };
+
   server.router.post('/account/register', koaBody(), async (ctx) => {
     if (!rateAllow(ctx, 'register', 10)) return;
     const { username, password } = readCredentials(ctx);
@@ -923,7 +933,69 @@ function registerAccountApi(): void {
       ctx.body = { error: result.error };
       return;
     }
+    if (uidKind(result.record.uid) === 'dev') {
+      ctx.body = devAuthResponse(result.record);
+      return;
+    }
     ctx.body = { uid: result.record.uid, username: result.record.username, kind: 'account' };
+  });
+
+  /**
+   * 开发者账号注册（邀请码 + 用户名 + 密码）。
+   * 邀请码由环境变量 BLADES_DEV_INVITE 配置（真实值绝不入库），未配置即不开放注册；
+   * 成功后签发 dev token（解锁本地热座调试），身份是第三类账号（8 位 UID）。
+   */
+  server.router.post('/account/dev-register', koaBody(), async (ctx) => {
+    if (!rateAllow(ctx, 'dev-register', 5)) return; // 低阈值防邀请码爆破
+    const configured = process.env.BLADES_DEV_INVITE;
+    if (configured === undefined || configured === '') {
+      ctx.status = 503;
+      ctx.body = { error: '开发者注册未开放' };
+      return;
+    }
+    const body = ctx.request.body as
+      | { invite?: unknown; username?: unknown; password?: unknown }
+      | undefined;
+    const invite = typeof body?.invite === 'string' ? body.invite : '';
+    if (!devInviteValid(invite, configured)) {
+      ctx.status = 403;
+      ctx.body = { error: '邀请码无效' };
+      return;
+    }
+    const { username, password } = readCredentials(ctx);
+    const result = accounts.register(username, password, 'dev');
+    if (!result.ok) {
+      ctx.status = result.status;
+      ctx.body = { error: result.error };
+      return;
+    }
+    ctx.body = devAuthResponse(result.record);
+  });
+
+  /**
+   * 校验开发者授权：token 未过期且账号仍存在（删号即吊销）。
+   * 客户端启动时用它决定是否解锁热座调试。
+   */
+  server.router.post('/account/dev-check', koaBody(), async (ctx) => {
+    if (!rateAllow(ctx, 'dev-check', 60)) return;
+    const body = ctx.request.body as { token?: unknown } | undefined;
+    const token = typeof body?.token === 'string' ? body.token : '';
+    const entry = token === '' ? null : devTokens.verify(token);
+    const record = entry ? accounts.findByUid(entry.uid) : undefined;
+    if (!entry || !record) {
+      ctx.status = 401;
+      ctx.body = { error: '开发者授权无效或已过期' };
+      return;
+    }
+    ctx.body = { uid: record.uid, username: record.username, kind: 'dev' };
+  });
+
+  /** 吊销开发者授权（登出）；token 不存在也照常返回 ok（幂等） */
+  server.router.post('/account/dev-logout', koaBody(), async (ctx) => {
+    if (!rateAllow(ctx, 'dev-check', 60)) return;
+    const body = ctx.request.body as { token?: unknown } | undefined;
+    if (typeof body?.token === 'string') devTokens.revoke(body.token);
+    ctx.body = { ok: true };
   });
 
   server.router.post('/seat-claim', koaBody(), async (ctx) => {

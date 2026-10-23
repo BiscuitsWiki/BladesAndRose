@@ -6,6 +6,8 @@ import {
   ACCOUNT_UID_MAX,
   ACCOUNT_UID_MIN,
   AccountStore,
+  DEV_UID_MAX,
+  DEV_UID_MIN,
   GUEST_UID_MAX,
   GUEST_UID_MIN,
   hashPassword,
@@ -31,7 +33,9 @@ afterEach(() => {
 });
 
 describe('UID 区间与生成', () => {
-  it('按位数划分两段区间：9 位是专属账号，10 位是游客', () => {
+  it('按数值划分三段区间：8 位开发者、9 位专属账号、10 位游客', () => {
+    expect(uidKind(String(DEV_UID_MIN))).toBe('dev');
+    expect(uidKind(String(DEV_UID_MAX))).toBe('dev');
     expect(uidKind(String(ACCOUNT_UID_MIN))).toBe('account');
     expect(uidKind(String(ACCOUNT_UID_MAX))).toBe('account');
     expect(uidKind(String(GUEST_UID_MIN))).toBe('guest');
@@ -39,13 +43,15 @@ describe('UID 区间与生成', () => {
   });
 
   it('非法 UID（位数不足 / 越界 / 脏串 / 带前导零 / 11 位）一律拒绝', () => {
-    for (const uid of ['', '99999999', '0', '12345678', '9999999999' + '9', '012345678', '100000000a', ' 100000000', '1e8', '123.456789']) {
+    for (const uid of ['', '9999999', '0', '10000000000', '012345678', '100000000a', ' 100000000', '1e8', '123.456789']) {
       expect(uidKind(uid)).toBeNull();
     }
   });
 
   it('随机发号落在对应区间内', () => {
     for (let i = 0; i < 50; i++) {
+      const dev = randomUid('dev', () => false);
+      expect(uidKind(dev)).toBe('dev');
       const account = randomUid('account', () => false);
       expect(uidKind(account)).toBe('account');
       const guest = randomUid('guest', () => false);
@@ -162,6 +168,35 @@ describe('AccountStore（含落盘）', () => {
     expect(store.register('Alice', 'secret123').ok).toBe(true);
     expect(store.register('alice', 'secret456')).toMatchObject({ ok: false, status: 409 });
     expect(store.register('a', 'secret456')).toMatchObject({ ok: false, status: 400 });
+  });
+
+  it('开发者账号：kind="dev" 发 8 位 UID，findByUid 可查（删号即吊销）', () => {
+    const store = new AccountStore(tempFile());
+    store.load();
+    const registered = store.register('DevUser', 'secret123', 'dev');
+    expect(registered.ok).toBe(true);
+    if (!registered.ok) return;
+    expect(uidKind(registered.record.uid)).toBe('dev');
+    expect(registered.record.uid).toHaveLength(8);
+    expect(store.findByUid(registered.record.uid)).toEqual(registered.record);
+    expect(store.findByUid('10000000')).toBeUndefined();
+    // 同池查重：dev 账号与正式账号用户名互斥
+    expect(store.register('devuser', 'secret456')).toMatchObject({ ok: false, status: 409 });
+  });
+
+  it('解析接受 dev 记录，旧账号文件零迁移', () => {
+    const text = JSON.stringify({
+      version: 1,
+      accounts: [
+        { uid: '12345678', username: 'Dev', nameKey: 'dev', salt: 'ab', hash: 'cd', createdAt: 1 },
+        { uid: '123456789', username: 'Alice', nameKey: 'alice', salt: 'ab', hash: 'cd', createdAt: 1 },
+      ],
+      guests: ['1000000001'],
+    });
+    const { file, warning } = parseAccountFile(text);
+    expect(file.accounts).toHaveLength(2);
+    expect(file.guests).toEqual(['1000000001']);
+    expect(warning).toBeNull();
   });
 
   it('游客发号落在 10 位区间，且重启后不重复发放', () => {

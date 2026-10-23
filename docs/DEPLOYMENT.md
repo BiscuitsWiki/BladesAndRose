@@ -15,7 +15,9 @@
 | 更新步骤 | ① `tar -czf` 打包 `src/ public/ Dockerfile .dockerignore package.json package-lock.json tsconfig.json vite.config.ts index.html`（`docs/` 与 `*.md` 被 `.dockerignore` 排除，不进镜像）→ ② `scp` 上传 → ③ 服务器 `sudo tar -xzf` 解包到 `/opt/bar` → ④ 先 `sudo docker tag blades-and-rose:latest blades-and-rose:prev` 留回滚点 → ⑤ `sudo docker compose -p bar up -d --build`。**`Dockerfile` 必须在打包清单里**：`public/` 进镜像靠它的 `COPY public ./public`，漏传就会「前端新代码已上线、但卡面全部 404」（2026-10-15 实际踩到过：只打包 `public/` 而没带 `Dockerfile`，服务器上的旧 Dockerfile 里没有这行） |
 | 回滚 | `sudo docker tag blades-and-rose:prev blades-and-rose:latest && sudo docker compose -p bar up -d`（源码可另从 GitHub `main` 取） |
 | 当前版本 | GitHub `main` 提交 `ded8750`（2026-10-23 **第七次**部署：含 `d3b2b0d` 依赖声明与 CORS https 预留、`7df2af9` 审查修复 8 项（魔法目标池不足死局、房间码 crypto 随机、游客号限量、巡检重入等）、`ded8750` 热座调试改构建开关门控——生产构建不渲染热座入口、hash 直入被拒）。回滚点 `blades-and-rose:prev` = 第六次部署的 `e9e1234` |
-| 限流 | 进程内按 IP 固定窗口（游客发号 20/分、注册 10/分、建房 20/分、座位认领 60/分、房间操作 60/分、房间信息 300/分），超限 429 |
+| 限流 | 进程内按 IP 固定窗口（游客发号 20/分、注册 10/分、开发者注册 5/分、建房 20/分、座位认领 60/分、房间操作 60/分、房间信息 300/分、dev 授权复核 60/分），超限 429 |
+| 开发者邀请码 | 环境变量 `BLADES_DEV_INVITE = <开发者邀请码>`（在 compose env / `.env` 配置，**真实值绝不入仓库**）；未配置时 `/account/dev-register` 返回 503，开发者注册不开放。改邀请码即作废旧码（已发 token 仍在有效期内，重启服务器可立即全量吊销） |
+| 开发者授权 token | 内存 Map 签发（7 天过期），仅用于解锁前端本地热座调试；**服务器重启即全量失效**（重新登录即可）。吊销三路：登出 / 删除账号记录 / 重启 |
 | SSH 登录 | 允许密码登录（2026-10-10 已回滚"仅密钥"加固：`00-hardening.conf` 已删除，配置回到原状）；`/etc/ssh/` 下的 `*.bak-hardening-20261009` 为当时备份，可随时清理。**2026-10-17 起本机 `id_ed25519` 公钥已加入 ubuntu 的 authorized_keys（免密部署），私钥只存本机** |
 | SSH 防爆破 | fail2ban（2026-10-10 安装，已设为开机自启）：sshd jail，10 分钟内失败 5 次封禁 6 小时，重复封禁时长翻倍（上限 1 周）；后端用 polling 读 `/var/log/auth.log`（Ubuntu 24.04 SSH 为 socket 激活，systemd 后端匹配不到日志）；配置在 `/etc/fail2ban/jail.d/bar-ssh.local`；查看 `sudo fail2ban-client status sshd`，解封 `sudo fail2ban-client set sshd unbanip <IP>` |
 
@@ -40,10 +42,10 @@
 │     │  ├─ game.ts  magic.ts  round.ts  setup.ts  view.ts
 │     │  ├─ autoPlay.ts  config.ts  rng.ts  types.ts  index.ts
 │     │  └─ __tests__/  auto-play.test.ts  engine.test.ts  loadout.test.ts  expanded-skills.test.ts
-│     └─ server/
+│     └── server/
 │        ├─ dev-server.ts                     ← 生产入口（PORT 环境变量 + 托管 dist + 房间/账号/座位 API + 按 IP 限流）
-│        ├─ accounts.ts   seats.ts   rateLimit.ts
-│        └─ __tests__/  accounts.test.ts  seats.test.ts  rate-limit.test.ts
+│        ├─ accounts.ts   devAuth.ts   seats.ts   rateLimit.ts
+│        └─ __tests__/  accounts.test.ts  devAuth.test.ts  seats.test.ts  rate-limit.test.ts
 │
 ├─ Docker 资源（docker compose -p bar 管理，与 att 项目隔离）
 │  ├─ 镜像  blades-and-rose:latest            483MB（node_modules + dist + src）
