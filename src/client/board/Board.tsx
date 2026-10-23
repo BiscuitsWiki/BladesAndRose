@@ -15,7 +15,7 @@ import { BudMark, ClosedEyeMark, CrystalHex, OpenEyeMark } from '../artwork';
 import { CardBack, CardFace, cardLabel } from '../cards';
 import { RevealStage } from './RevealStage';
 import { decideRevealAnim, prefersReducedMotion } from '../revealAnim';
-import { seatLayout, seatVisualOf, type SeatZone } from '../scene';
+import { seatLayout, seatVisualOf, topRowFits, type SeatZone } from '../scene';
 import { SeatCard } from './SeatCard';
 import { TableScene } from './TableScene';
 
@@ -155,6 +155,16 @@ export function Board({
    * 时切紧凑列表（方案 §5.2 的兜底）。
    */
   const [compactSeats, setCompactSeats] = useState(() => G.players.length >= 9);
+  /**
+   * 视口宽度（环绕席位的宽度门控）：9–10 人局顶行 4–5 张卡，窄屏放不下（最右出屏），
+   * 据此禁用「环绕席位」切换；转屏 / 缩放窗口时刷新并自动回落紧凑列表。
+   */
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   /** 上一帧快照（动效判定的基准）；挂载时为 null → 首帧不播任何动画 */
   const prevSnapRef = useRef<AnimSnapshot | null>(null);
 
@@ -315,6 +325,14 @@ export function Board({
     G.players
       .filter((p) => slotOf(p.id)?.zone === zone)
       .sort((a, b) => (slotOf(a.id)?.col ?? 0) - (slotOf(b.id)?.col ?? 0));
+
+  /** 环绕席位放不放得下：顶行张数 × 席位卡宽 + 间距 ≤ 视口宽度（纯函数 `scene.topRowFits`） */
+  const surroundFits = topRowFits(viewportWidth, seatSlots.filter((s) => s.zone === 'top').length);
+
+  // 放不下时自动回落紧凑列表（转屏 / 缩放窗口让环绕溢出时兜底）
+  useEffect(() => {
+    if (!surroundFits) setCompactSeats(true);
+  }, [surroundFits]);
 
   /**
    * 桌心版图（2026-10-17 改版）：版图移回全宽独立面板（紧凑列表沿用同一渲染），
@@ -736,8 +754,14 @@ export function Board({
             ))}
           </span>
         )}
-        {/* 兜底视图：9–10 人局超出牌桌容量时切回改造前的竖排列表（方案 §5.2） */}
-        <button className="btn small" onClick={() => setCompactSeats((prev) => !prev)}>
+        {/* 兜底视图：9–10 人局超出牌桌容量时切回改造前的竖排列表（方案 §5.2）；
+            宽度门控：视口放不下顶行时禁用切换（防 9–10 人局环绕溢出出屏） */}
+        <button
+          className="btn small"
+          disabled={!surroundFits}
+          title={surroundFits ? undefined : '当前屏幕宽度放不下环绕席位的顶行，请加宽窗口或旋转横屏'}
+          onClick={() => setCompactSeats((prev) => !prev)}
+        >
           {compactSeats ? '环绕席位' : '紧凑列表'}
         </button>
       </div>

@@ -75,6 +75,25 @@ export function seatLayout(selfSeat: number | null, count: number): SeatSlot[] {
 }
 
 /**
+ * 顶行在给定视口宽度下放不放得下（环绕席位的宽度门控）。
+ *
+ * 9–10 人局顶行有 4–5 张席位卡，超出「顶行最多 3 张」的窄视口预算会横向溢出（最右出屏），
+ * 端上据此门控「环绕席位」切换并自动回落紧凑列表。席位卡宽度与间距取 styles.css 的同一套
+ * 参数（clamp(86px, 27vw, 132px)；≤560px 窄屏档 padding 10px / gap 6px，更宽 14px / 10px），
+ * CSS 参数改动时须同步本函数。
+ */
+export function topRowFits(viewportWidth: number, topSize: number): boolean {
+  if (!Number.isFinite(viewportWidth) || viewportWidth <= 0) return false;
+  if (!Number.isInteger(topSize) || topSize < 0) return false;
+  if (topSize === 0) return true;
+  const narrow = viewportWidth <= 560;
+  const padding = narrow ? 10 : 14;
+  const gap = narrow ? 6 : 10;
+  const card = Math.min(Math.max(86, viewportWidth * 0.27), 132);
+  return padding * 2 + card * topSize + gap * (topSize - 1) <= viewportWidth;
+}
+
+/**
  * 席位卡上要显示的一个标记。
  * `key` 是语义标识（端上可据此换成图标角标而不动共享逻辑），`text` 是当前界面的文案。
  */

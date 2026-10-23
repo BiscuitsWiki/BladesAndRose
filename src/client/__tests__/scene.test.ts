@@ -10,7 +10,7 @@ import {
   type Role,
 } from '../../engine';
 import { cardLabel } from '../cards';
-import { cardFaceOf, seatLayout, seatVisualOf } from '../scene';
+import { cardFaceOf, seatLayout, seatVisualOf, topRowFits } from '../scene';
 
 const COUNTS = [5, 6, 7, 8, 9, 10];
 
@@ -331,5 +331,40 @@ describe('卡面语义（cardFaceOf）', () => {
     for (const card of cards) {
       expect(cardFaceOf(card).label).toBe(cardLabel(card));
     }
+  });
+});
+
+describe('顶行宽度门控（topRowFits）——9–10 人局环绕溢出回归', () => {
+  it('8 人及以下（顶行最多 3 张）：任何常见视口都放得下', () => {
+    for (const width of [320, 375, 414, 560, 561, 768, 1280]) {
+      for (let top = 0; top <= 3; top++) {
+        expect(topRowFits(width, top)).toBe(true);
+      }
+    }
+  });
+
+  it('9 人局顶行 4 张：375 手机放不下（回归：最右出屏），桌面放得下', () => {
+    expect(topRowFits(375, 4)).toBe(false);
+    expect(topRowFits(320, 4)).toBe(false);
+    expect(topRowFits(560, 4)).toBe(false);
+    expect(topRowFits(600, 4)).toBe(true);
+    expect(topRowFits(768, 4)).toBe(true);
+  });
+
+  it('10 人局顶行 5 张：手机与窄窗口放不下，宽视口放得下', () => {
+    expect(topRowFits(375, 5)).toBe(false);
+    expect(topRowFits(560, 5)).toBe(false);
+    expect(topRowFits(600, 5)).toBe(false);
+    expect(topRowFits(768, 5)).toBe(true);
+    expect(topRowFits(1280, 5)).toBe(true);
+  });
+
+  it('非法入参：空顶行恒可放，其余返回 false', () => {
+    expect(topRowFits(375, 0)).toBe(true);
+    expect(topRowFits(0, 3)).toBe(false);
+    expect(topRowFits(-1, 3)).toBe(false);
+    expect(topRowFits(Number.NaN, 3)).toBe(false);
+    expect(topRowFits(375, 1.5)).toBe(false);
+    expect(topRowFits(375, -1)).toBe(false);
   });
 });
