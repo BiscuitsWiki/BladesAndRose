@@ -18,7 +18,7 @@ import {
   type PlayerViewEntry,
 } from '../engine';
 
-/** 席位所在的桌区分区：顶行（横排 2–5）、左右两翼（各 0–2）、底行（恒 1：当前视角本人） */
+/** 席位所在的桌区分区：顶行（横排 2–3）、左右两翼（各 0–3）、底行（恒 1：当前视角本人） */
 export type SeatZone = 'top' | 'left' | 'right' | 'bottom';
 
 /** 席位在牌桌上的位置与分区内次序 */
@@ -32,7 +32,7 @@ export interface SeatSlot {
    * 顶行＝左→右，左翼＝下→上，右翼＝上→下，底行恒 0（只放本人）。
    */
   col: number;
-  /** 该分区总席位数（端上可据此居中排布；顶行 2–5、左右翼 0–2、底行恒 1） */
+  /** 该分区总席位数（端上可据此居中排布；顶行 2–3、左右翼 0–3、底行恒 1） */
   rowSize: number;
 }
 
@@ -43,12 +43,14 @@ export interface SeatSlot {
  * - `k = (seat − selfSeat + count) % count`，`k = 0` 就是自己；
  * - 底行恒 1 席（本人）——底行整块留给「自己 + 手牌空间」（见 docs/UI-OVERHAUL-PLAN.md §5.1）；
  *   其余 `others = count − 1` 席按顺时针填 左翼 → 顶行 → 右翼；
- * - 两翼每侧席位数：7–8 人局各 2（卡片变矮后靠加高两翼吃下），5–6 人局各 1；顶行吃掉剩余。
+ * - 两翼每侧席位数：9–10 人局各 3（顶行收窄到 2–3 张——顶行 4–5 张时手机宽度放不下、最右出屏），
+ *   7–8 人局各 2（卡片变矮后靠加高两翼吃下），5–6 人局各 1；顶行吃掉剩余。
  *   形态表（底行恒「自己」1 席）：
  *   5 人 = 顶 2 + 左右各 1；6 人 = 顶 3 + 左右各 1；
  *   7 人 = 顶 2 + 左右各 2；8 人 = 顶 3 + 左右各 2；
- * - ≥9 人超出牌桌容量（环绕形态最多 8 人：顶 3 + 左右各 2 + 底 1），端上自行切紧凑列表兜底，
- *   本函数仍按「左右各 2 + 顶 count−5」给出可用的分布（顶行 4–5 张，端上不该用）；
+ *   9 人 = 顶 2 + 左右各 3；10 人 = 顶 3 + 左右各 3；
+ * - 顶行恒 ≤3 张（宽度预算按 3 张核算，见 topRowFits）；两翼 3 行时桌布更高，
+ *   端上按人数分档预留 .table-mid 高度（9–10 人局 3 行档）；
  * - 顺时针序即：左翼（下→上）→ 顶行（左→右）→ 右翼（上→下）；`col` 是分区内的顺时针序号，
  *   端上按 col 升序摆放即可（左翼靠 column-reverse 让 col 0 的下家贴向底行的自己）；
  * - `selfSeat` 为 null（观战 / 全局视图）时按 0 处理；`count < 1` 或非整数时返回空数组，
@@ -57,8 +59,8 @@ export interface SeatSlot {
 export function seatLayout(selfSeat: number | null, count: number): SeatSlot[] {
   if (!Number.isInteger(count) || count < 1) return [];
   const self = selfSeat === null ? 0 : ((selfSeat % count) + count) % count;
-  /** 两翼每侧席位数：7–8 人局各 2，5–6 人局各 1（更小的人数全部塞进顶行） */
-  const perWing = count >= 7 ? 2 : count >= 5 ? 1 : 0;
+  /** 两翼每侧席位数：9–10 人局各 3，7–8 人局各 2，5–6 人局各 1（更小的人数全部塞进顶行） */
+  const perWing = count >= 9 ? 3 : count >= 7 ? 2 : count >= 5 ? 1 : 0;
   /** 顶行吃掉两翼之后剩下的席位 */
   const topSize = Math.max(0, count - 1 - perWing * 2);
 
@@ -77,8 +79,9 @@ export function seatLayout(selfSeat: number | null, count: number): SeatSlot[] {
 /**
  * 顶行在给定视口宽度下放不放得下（环绕席位的宽度门控）。
  *
- * 9–10 人局顶行有 4–5 张席位卡，超出「顶行最多 3 张」的窄视口预算会横向溢出（最右出屏），
- * 端上据此门控「环绕席位」切换并自动回落紧凑列表。席位卡宽度与间距取 styles.css 的同一套
+ * 顶行超出「最多 3 张」的窄视口预算会横向溢出（最右出屏）——最初由 9–10 人局顶行
+ * 4–5 张触发（现已改为两翼各 3 行、顶行收窄到 2–3 张），端上仍据此门控「环绕席位」
+ * 切换并自动回落紧凑列表作保险。席位卡宽度与间距取 styles.css 的同一套
  * 参数（clamp(86px, 27vw, 132px)；≤560px 窄屏档 padding 10px / gap 6px，更宽 14px / 10px），
  * CSS 参数改动时须同步本函数。
  */

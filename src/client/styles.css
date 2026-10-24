@@ -517,16 +517,21 @@ em.rose-count {
   gap: 10px;
 }
 
-/* 中间行：左翼 + 桌心水印 + 右翼（两翼各 0–2 席，纵排见 .table-wing）。
-   min-height 恒按「两翼 2 行」预留（席位卡 114px × 2 + 两翼行距 10px ≈ 238，取 240 留 2px 冗余
-   确保 7–8 人局两翼内容也被同一高度收口）：5–6 人局两翼只有 1 张卡时同样占住 2 行高度
-   （单卡垂直居中），保证 5–8 人局桌布高度一致，不随人数增减跳动 */
+/* 中间行：左翼 + 桌心水印 + 右翼（两翼各 0–3 席，纵排见 .table-wing）。
+   min-height 按两翼行数**分档**预留（.table-scene.wings-3 = 9–10 人局两翼 3 行档）：
+   2 行档按席位卡 114px × 2 + 两翼行距 10px ≈ 238，取 240 留 2px 冗余，
+   5–6 人局两翼只有 1 张卡时同样占住 2 行高度（单卡垂直居中），5–8 人局桌布等高；
+   3 行档按 114px × 3 + 行距 10px × 2 ≈ 362，取 364（同法留冗余），9 与 10 人局等高 */
 .table-mid {
   display: flex;
   align-items: center;
   gap: 10px;
   flex: 1;
   min-height: 240px;
+}
+
+.table-scene.wings-3 .table-mid {
+  min-height: 364px;
 }
 
 /* 桌心：纹章水印（纯装饰，z-index 低于席位卡（2）且 pointer-events: none） */
@@ -1771,8 +1776,13 @@ em.rose {
   }
 
   .table-mid {
-    /* 同桌面：恒按两翼 2 行预留（114px × 2 + 两翼行距 6px ≈ 234，取 236 留冗余），人数不同高度一致 */
+    /* 同桌面分档：2 行档按两翼 2 行预留（114px × 2 + 两翼行距 6px ≈ 234，取 236 留冗余）；
+       3 行档（wings-3）按 114px × 3 + 行距 6px × 2 ≈ 354，取 356 */
     min-height: 236px;
+  }
+
+  .table-scene.wings-3 .table-mid {
+    min-height: 356px;
   }
 
   /* 两翼纵排同理收紧；左翼的反向由上面的 .table-wing.left 保持 */

@@ -151,13 +151,13 @@ export function Board({
   /** 回合提醒：该脉冲的座位，null = 不播 */
   const [turnPulse, setTurnPulse] = useState<string | null>(null);
   /**
-   * 席位视图：默认牌桌（三行环绕）；9–10 人局超出容量（顶 3 + 左右各 2 + 底 1 = 8）
-   * 时切紧凑列表（方案 §5.2 的兜底）。
+   * 席位视图：默认牌桌（三行环绕）——5–10 人均在容量内（9–10 人局两翼各 3 行、顶行收窄到 2/3 张）；
+   * 紧凑列表是手动兜底视图（改造前的竖排列表）。
    */
-  const [compactSeats, setCompactSeats] = useState(() => G.players.length >= 9);
+  const [compactSeats, setCompactSeats] = useState(false);
   /**
-   * 视口宽度（环绕席位的宽度门控）：9–10 人局顶行 4–5 张卡，窄屏放不下（最右出屏），
-   * 据此禁用「环绕席位」切换；转屏 / 缩放窗口时刷新并自动回落紧凑列表。
+   * 视口宽度（环绕席位的宽度门控）：顶行超出宽度预算时禁用「环绕席位」切换并自动回落
+   * 紧凑列表。曾因 9–10 人局顶行 4–5 张窄屏溢出出屏而加；现顶行恒 ≤3 张，作保险保留。
    */
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   useEffect(() => {
@@ -564,7 +564,7 @@ export function Board({
    *
    * 一份内容两处挂载：
    *   - `withHeading = false`：牌桌底行自区的右侧（环绕席位模式的默认位置）；
-   *   - `withHeading = true`：紧凑列表兜底（9–10 人局 / 手动切换）下没有牌桌，
+   *   - `withHeading = true`：紧凑列表（手动兜底视图）下没有牌桌，
    *     仍在原位以「你的手牌」面板呈现。
    * 观战（`me` 为空）：面板形态整体不渲染（与原行为一致）；牌桌自区改用卡背占位。
    */
@@ -754,8 +754,8 @@ export function Board({
             ))}
           </span>
         )}
-        {/* 兜底视图：9–10 人局超出牌桌容量时切回改造前的竖排列表（方案 §5.2）；
-            宽度门控：视口放不下顶行时禁用切换（防 9–10 人局环绕溢出出屏） */}
+        {/* 紧凑列表为手动兜底视图（改造前的竖排列表）；
+            宽度门控：视口放不下顶行时禁用环绕切换（防顶行溢出出屏） */}
         <button
           className="btn small"
           disabled={!surroundFits}
@@ -770,6 +770,7 @@ export function Board({
       ) : (
         /* 底行 = 当前视角玩家独享：左＝自己的席位卡，右＝手牌空间（含阶段动作按钮） */
         <TableScene
+          wingRows={G.players.length >= 9 ? 3 : 2}
           top={<>{zoneSeats('top').map((p) => renderSeatCard(p))}</>}
           left={<>{zoneSeats('left').map((p) => renderSeatCard(p))}</>}
           right={<>{zoneSeats('right').map((p) => renderSeatCard(p))}</>}

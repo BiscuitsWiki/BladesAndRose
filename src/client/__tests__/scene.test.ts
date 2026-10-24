@@ -41,7 +41,7 @@ describe('席位分布（seatLayout）——竖版三行牌桌', () => {
     }
   });
 
-  it('分布形态：5 人 顶2、6 人 顶3、7 人 顶2、8 人 顶3；左右各 1（5–6 人）或各 2（7–8 人）；底行恒 1', () => {
+  it('分布形态：5 人 顶2、6 人 顶3、7 人 顶2、8 人 顶3、9 人 顶2、10 人 顶3；左右各 1（5–6 人）、各 2（7–8 人）或各 3（9–10 人）；底行恒 1', () => {
     const zoneSizes = (count: number) => {
       const slots = seatLayout(0, count);
       const size = (zone: string) => slots.filter((slot) => slot.zone === zone).length;
@@ -51,6 +51,8 @@ describe('席位分布（seatLayout）——竖版三行牌桌', () => {
     expect(zoneSizes(6)).toEqual({ top: 3, left: 1, right: 1, bottom: 1 });
     expect(zoneSizes(7)).toEqual({ top: 2, left: 2, right: 2, bottom: 1 });
     expect(zoneSizes(8)).toEqual({ top: 3, left: 2, right: 2, bottom: 1 });
+    expect(zoneSizes(9)).toEqual({ top: 2, left: 3, right: 3, bottom: 1 });
+    expect(zoneSizes(10)).toEqual({ top: 3, left: 3, right: 3, bottom: 1 });
   });
 
   it('顺时针序：左翼（下→上）→ 顶行（左→右）→ 右翼（上→下），下家/上家贴身', () => {
@@ -129,13 +131,15 @@ describe('席位分布（seatLayout）——竖版三行牌桌', () => {
     expect(seatLayout(0, 4.5)).toEqual([]);
   });
 
-  it('9–10 人：形态规则依旧成立（左右各 2、底 1，顶行溢出；端上据此切紧凑列表兜底）', () => {
+  it('9–10 人：两翼各 3 行吃掉顶行压力，顶行恒 ≤3 张、375 手机也放得下（宽度门控不再拦截）', () => {
     for (const count of [9, 10]) {
       const slots = seatLayout(0, count);
       expect(slots.filter((slot) => slot.zone === 'bottom')).toHaveLength(1);
-      expect(slots.filter((slot) => slot.zone === 'left')).toHaveLength(2);
-      expect(slots.filter((slot) => slot.zone === 'right')).toHaveLength(2);
-      expect(slots.filter((slot) => slot.zone === 'top')).toHaveLength(count - 5);
+      expect(slots.filter((slot) => slot.zone === 'left')).toHaveLength(3);
+      expect(slots.filter((slot) => slot.zone === 'right')).toHaveLength(3);
+      const top = slots.filter((slot) => slot.zone === 'top').length;
+      expect(top).toBe(count - 7);
+      expect(topRowFits(375, top)).toBe(true);
     }
   });
 
@@ -335,7 +339,15 @@ describe('卡面语义（cardFaceOf）', () => {
 });
 
 describe('顶行宽度门控（topRowFits）——9–10 人局环绕溢出回归', () => {
-  it('8 人及以下（顶行最多 3 张）：任何常见视口都放得下', () => {
+  it('5–10 人局的顶行（seatLayout 恒 ≤3 张）：375 手机与 320 极窄屏都放得下', () => {
+    for (const count of COUNTS) {
+      const top = seatLayout(0, count).filter((slot) => slot.zone === 'top').length;
+      expect(topRowFits(375, top)).toBe(true);
+      expect(topRowFits(320, top)).toBe(true);
+    }
+  });
+
+  it('顶行 3 张以内：任何常见视口都放得下', () => {
     for (const width of [320, 375, 414, 560, 561, 768, 1280]) {
       for (let top = 0; top <= 3; top++) {
         expect(topRowFits(width, top)).toBe(true);
@@ -343,7 +355,7 @@ describe('顶行宽度门控（topRowFits）——9–10 人局环绕溢出回�
     }
   });
 
-  it('9 人局顶行 4 张：375 手机放不下（回归：最右出屏），桌面放得下', () => {
+  it('顶行 4 张（旧 9 人局形态，历史回归）：375 手机放不下（最右出屏），桌面放得下', () => {
     expect(topRowFits(375, 4)).toBe(false);
     expect(topRowFits(320, 4)).toBe(false);
     expect(topRowFits(560, 4)).toBe(false);
@@ -351,7 +363,7 @@ describe('顶行宽度门控（topRowFits）——9–10 人局环绕溢出回�
     expect(topRowFits(768, 4)).toBe(true);
   });
 
-  it('10 人局顶行 5 张：手机与窄窗口放不下，宽视口放得下', () => {
+  it('顶行 5 张（旧 10 人局形态，历史回归）：手机与窄窗口放不下，宽视口放得下', () => {
     expect(topRowFits(375, 5)).toBe(false);
     expect(topRowFits(560, 5)).toBe(false);
     expect(topRowFits(600, 5)).toBe(false);
