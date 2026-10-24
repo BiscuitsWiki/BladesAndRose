@@ -14,7 +14,7 @@
 | 部署方式 | 上传源码 → `sudo docker compose -p bar up -d --build` |
 | 更新步骤 | ① `tar -czf` 打包 `src/ public/ Dockerfile .dockerignore package.json package-lock.json tsconfig.json vite.config.ts index.html`（`docs/` 与 `*.md` 被 `.dockerignore` 排除，不进镜像）→ ② `scp` 上传 → ③ 服务器 `sudo tar -xzf` 解包到 `/opt/bar` → ④ 先 `sudo docker tag blades-and-rose:latest blades-and-rose:prev` 留回滚点 → ⑤ `sudo docker compose -p bar up -d --build`。**`Dockerfile` 必须在打包清单里**：`public/` 进镜像靠它的 `COPY public ./public`，漏传就会「前端新代码已上线、但卡面全部 404」（2026-10-15 实际踩到过：只打包 `public/` 而没带 `Dockerfile`，服务器上的旧 Dockerfile 里没有这行） |
 | 回滚 | `sudo docker tag blades-and-rose:prev blades-and-rose:latest && sudo docker compose -p bar up -d`（源码可另从 GitHub `main` 取） |
-| 当前版本 | GitHub `main` 提交 `a1d0611`（2026-10-24 **第十次**部署：9–10 人局环绕布局改「两翼各 3 行、顶行 2/3 张」，手机可用环绕席位；桌高按两翼行数分档（5–8 人 2 行档不变、9–10 人 3 行档），宽度门控保留作保险）。回滚点 `blades-and-rose:prev` = 第九次部署的 `eacb865` |
+| 当前版本 | GitHub `main` 提交 `6a9c19e`（2026-10-24 **第十一次**部署：开发者 token 失效（过期 / 服务器重启作废）时身份条显示过期提示与「重新登录」按钮，一键换发新 token 恢复本地热座，不再表现为「已登录却没有热座」）。回滚点 `blades-and-rose:prev` = 第十次部署的 `a1d0611` |
 | 限流 | 进程内按 IP 固定窗口（游客发号 20/分、注册 10/分、开发者注册 5/分、建房 20/分、座位认领 60/分、房间操作 60/分、房间信息 300/分、dev 授权复核 60/分），超限 429 |
 | 开发者邀请码 | 环境变量 `BLADES_DEV_INVITE = <开发者邀请码>`（在 compose env / `.env` 配置，**真实值绝不入仓库**）；未配置时 `/account/dev-register` 返回 503，开发者注册不开放。改邀请码即作废旧码（已发 token 仍在有效期内，重启服务器可立即全量吊销）。**已配置**：服务器上就地生成、存 `/opt/bar/.env`（root 600 权限），查看用 `sudo cat /opt/bar/.env` |
 | 开发者授权 token | 内存 Map 签发（7 天过期），仅用于解锁前端本地热座调试；**服务器重启即全量失效**（重新登录即可）。吊销三路：登出 / 删除账号记录 / 重启 |
