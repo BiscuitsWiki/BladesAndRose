@@ -482,6 +482,7 @@ export function App() {
         account={account}
         loadout={hotseatLoadout}
         hotseatAllowed={hotseatAllowed}
+        devLocked={devGate === 'locked'}
         onLoadoutChange={setHotseatLoadout}
         onAccountChange={setAccount}
         onResume={(next) => {

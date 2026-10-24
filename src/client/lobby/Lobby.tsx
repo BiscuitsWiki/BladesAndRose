@@ -30,6 +30,7 @@ export function Lobby({
   account,
   loadout,
   hotseatAllowed,
+  devLocked,
   onLoadoutChange,
   onAccountChange,
   onResume,
@@ -46,6 +47,8 @@ export function Lobby({
   loadout: SkillLoadout;
   /** 热座调试是否可用（构建开关 OR 开发者授权）：关闭时不渲染本地热座入口 */
   hotseatAllowed: boolean;
+  /** 开发者授权被锁定（token 过期 / 服务器重启作废）：身份条给出「重新登录」入口 */
+  devLocked: boolean;
   onLoadoutChange: (loadout: SkillLoadout) => void;
   onAccountChange: (account: LocalAccount | null) => void;
   /** 注册 / 登录成功：查一查该 UID 有没有进行中的对局，有就拉回 */
@@ -140,7 +143,7 @@ export function Lobby({
             : '创建或加入房间，把链接发给其他玩家即可联机对局。'}
         </p>
       </header>
-      <AccountBar account={account} onAccountChange={onAccountChange} onResume={onResume} />
+      <AccountBar account={account} devLocked={devLocked} onAccountChange={onAccountChange} onResume={onResume} />
       <div className="actions">
         <span className="dim">你的昵称：</span>
         <input

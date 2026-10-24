@@ -65,10 +65,16 @@ function CheckIcon() {
 
 export function AccountBar({
   account,
+  devLocked,
   onAccountChange,
   onResume,
 }: {
   account: LocalAccount | null;
+  /**
+   * 开发者授权被锁定（token 过期 / 服务器重启作废）：身份条虽显示已登录，
+   * 但本地热座已锁——给出「重新登录」入口换发新 token，避免看起来像「登录了却没有热座」。
+   */
+  devLocked: boolean;
   onAccountChange: (account: LocalAccount | null) => void;
   /** 注册 / 登录成功：让上层查一查该 UID 有没有进行中的对局 */
   onResume: (account: LocalAccount) => void;
@@ -165,9 +171,26 @@ export function AccountBar({
         </>
       )}
       {account !== null && account.kind !== 'guest' && mode === 'idle' && (
-        <button className="btn small" onClick={() => void logout()}>
-          退出登录
-        </button>
+        <>
+          {/* 开发者授权失效（过期 / 服务器重启作废）：已登录但热座被锁，给「重新登录」换发新 token */}
+          {account.kind === 'dev' && devLocked && (
+            <>
+              <span className="warn">登录已过期，重新登录以恢复本地热座</span>
+              <button
+                className="btn small primary"
+                onClick={() => {
+                  setUsername(account.username ?? '');
+                  open('login');
+                }}
+              >
+                重新登录
+              </button>
+            </>
+          )}
+          <button className="btn small" onClick={() => void logout()}>
+            退出登录
+          </button>
+        </>
       )}
       {mode !== 'idle' && (
         <span className="account-form">
